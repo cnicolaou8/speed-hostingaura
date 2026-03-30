@@ -1,71 +1,230 @@
 <?php
+// ══════════════════════════════════════════════════════════════
+// results.php — Public shareable speed test result page
+// Accessed via: results.php?id=XXXXXXXX
+// Displays download, upload, ping, ISP and test date
+// Works for both guests and logged-in users
+// ══════════════════════════════════════════════════════════════
 require_once 'config.php';
 
-$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
-if ($conn->connect_error) {
-    die("Connection failed.");
+// ── DATABASE CONNECTION ───────────────────────────────────────
+$conn = getDBConnection();
+if (!$conn) {
+    die("Server error. Please try again later.");
 }
 
-$testId = $conn->real_escape_string($_GET['id'] ?? '');
-$res    = $conn->query("SELECT * FROM speed_results WHERE test_id = '$testId'");
-$data   = $res->fetch_assoc();
+// ── GET TEST ID FROM URL ──────────────────────────────────────
+$testId = trim($_GET['id'] ?? '');
 
-if (!$data) {
-    die("Speed test result not found.");
+// Validate test ID format (must be 8 alphanumeric characters)
+if (!preg_match('/^[a-z0-9]{8}$/', $testId)) {
+    header("Location: index.html");
+    exit;
 }
 
-$timestamp     = new DateTime($data['created_at']);
-$formattedDate = $timestamp->format('M j, Y');
-$formattedTime = $timestamp->format('g:i A');
+// ══════════════════════════════════════════════════════════════
+// FETCH RESULT FROM DATABASE
+// ══════════════════════════════════════════════════════════════
+$stmt = $conn->prepare("SELECT * FROM speed_results WHERE test_id = ?");
+$stmt->bind_param("s", $testId);
+$stmt->execute();
+$result = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+$conn->close();
+
+// Redirect home if test ID not found
+if (!$result) {
+    header("Location: index.html");
+    exit;
+}
+
+// ── FORMAT DATE ───────────────────────────────────────────────
+$date = new DateTime($result['created_at']);
+$formattedDate = $date->format('F j, Y \a\t g:i A');
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Test Results — HostingAura</title>
-<style>
-body{background:#070711;color:#e2e8f0;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}
-.box{background:#0c0c1c;border:1px solid #181830;padding:40px;border-radius:24px;text-align:center;width:320px;box-shadow:0 10px 40px rgba(0,0,0,0.6)}
-.title{font-size:0.8rem;color:#6366f1;text-transform:uppercase;letter-spacing:3px;margin-bottom:30px}
-.test-id-display{font-size:0.7rem;color:#64748b;margin-bottom:20px;font-family:monospace}
-.test-id-display .lbl{color:#475569;text-transform:uppercase;letter-spacing:2px;font-size:0.6rem;display:block;margin-bottom:5px}
-.test-id-display .tid{color:#6366f1;font-weight:700;font-size:0.85rem}
-.timestamp{font-size:0.72rem;color:#64748b;margin-bottom:25px;line-height:1.5}
-.timestamp-date{display:block;font-weight:600;color:#94a3b8}
-.timestamp-time{display:block;font-size:0.68rem;color:#475569;margin-top:3px}
-.val{font-size:3.5rem;font-weight:800;margin:5px 0;line-height:1}
-.label{font-size:0.65rem;color:#475569;text-transform:uppercase;margin-bottom:25px;letter-spacing:1px}
-.isp-tag{font-size:0.7rem;color:#94a3b8;margin-bottom:20px;display:block;opacity:0.7}
-.btn{display:inline-block;margin-top:30px;color:#fff;background:linear-gradient(135deg,#6366f1,#8b5cf6);text-decoration:none;font-size:0.85rem;font-weight:600;padding:12px 30px;border-radius:99px;transition:0.2s}
-.btn:hover{transform:scale(1.05)}
-.privacy-footer{margin-top:30px;padding-top:20px;border-top:1px solid #181830;font-size:0.65rem;color:#64748b;line-height:1.6}
-.privacy-footer a{color:#6366f1;text-decoration:none;font-weight:600}
-.privacy-footer a:hover{text-decoration:underline}
-</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <!-- SEO & Share Meta Tags -->
+  <title>Speed Test Result — <?= htmlspecialchars($result['download_speed']) ?> Mbps — HostingAura</title>
+  <meta name="description" content="Download: <?= htmlspecialchars($result['download_speed']) ?> Mbps | Upload: <?= htmlspecialchars($result['upload_speed']) ?> Mbps | Ping: <?= htmlspecialchars($result['ping']) ?> ms">
+
+  <!-- Open Graph (for sharing on social media) -->
+  <meta property="og:title" content="My Speed Test — HostingAura"/>
+  <meta property="og:description" content="⬇️ <?= htmlspecialchars($result['download_speed']) ?> Mbps  ⬆️ <?= htmlspecialchars($result['upload_speed']) ?> Mbps  📡 <?= htmlspecialchars($result['ping']) ?> ms"/>
+  <meta property="og:url" content="<?= SITE_URL ?>/results.php?id=<?= htmlspecialchars($testId) ?>"/>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #070711;
+      background-image: radial-gradient(ellipse 90% 55% at 50% 0%, rgba(99,102,241,.15) 0%, transparent 65%);
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .card {
+      background: #0c0c1c;
+      border: 1px solid #1e1e3a;
+      border-radius: 20px;
+      padding: 3rem;
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* Logo */
+    .logo { font-size: 1.5rem; font-weight: 800; margin-bottom: 2rem; }
+    .logo-hosting {
+      background: linear-gradient(90deg, #38bdf8, #6366f1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .logo-aura {
+      background: linear-gradient(90deg, #a855f7, #ec4899);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Result Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+    .stat {
+      background: #0f0f1f;
+      border: 1px solid #181830;
+      border-radius: 12px;
+      padding: 1.5rem 1rem;
+    }
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #6366f1;
+      margin-bottom: 0.25rem;
+    }
+    .stat-unit {
+      font-size: 0.75rem;
+      color: #475569;
+      margin-bottom: 0.5rem;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Meta Info */
+    .meta {
+      color: #475569;
+      font-size: 0.85rem;
+      margin: 1.5rem 0;
+      line-height: 1.8;
+    }
+    .meta span { color: #64748b; }
+
+    /* Buttons */
+    .actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+    .btn {
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(99,102,241,0.3); }
+    .btn-secondary {
+      background: #1e1e3a;
+      color: #94a3b8;
+      border: 1px solid #334155;
+    }
+    .btn-secondary:hover { background: #2e2e4a; color: #e2e8f0; }
+
+    /* Test ID */
+    .test-id {
+      font-family: monospace;
+      color: #334155;
+      font-size: 0.75rem;
+      margin-top: 1.5rem;
+    }
+
+    @media (max-width: 480px) {
+      .card { padding: 2rem 1.5rem; }
+      .stats { grid-template-columns: 1fr; }
+      .stat-value { font-size: 1.5rem; }
+    }
+  </style>
 </head>
 <body>
-<div class="box">
-    <div class="title">HostingAura Result</div>
-    <div class="test-id-display">
-        <span class="lbl">Test ID</span>
-        <span class="tid"><?php echo htmlspecialchars($testId); ?></span>
+  <div class="card">
+
+    <!-- Logo -->
+    <div class="logo">
+      <span class="logo-hosting">hosting</span><span class="logo-aura">aura</span>
     </div>
-    <div class="timestamp">
-        <span class="timestamp-date"><?php echo $formattedDate; ?></span>
-        <span class="timestamp-time"><?php echo $formattedTime; ?></span>
+
+    <h2 style="color:#e2e8f0; margin-bottom:0.5rem">Speed Test Result</h2>
+    <p style="color:#64748b; font-size:0.9rem; margin-bottom:1rem"><?= $formattedDate ?></p>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value"><?= htmlspecialchars($result['download_speed']) ?></div>
+        <div class="stat-unit">Mbps</div>
+        <div class="stat-label">⬇️ Download</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value"><?= htmlspecialchars($result['upload_speed']) ?></div>
+        <div class="stat-unit">Mbps</div>
+        <div class="stat-label">⬆️ Upload</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value"><?= htmlspecialchars($result['ping']) ?></div>
+        <div class="stat-unit">ms</div>
+        <div class="stat-label">📡 Ping</div>
+      </div>
     </div>
-    <span class="isp-tag">ISP: <?php echo htmlspecialchars($data['isp']); ?></span>
-    <div class="val" style="color:#6366f1"><?php echo $data['download_speed']; ?></div>
-    <div class="label">Mbps Download</div>
-    <div class="val" style="color:#ec4899"><?php echo $data['upload_speed']; ?></div>
-    <div class="label">Mbps Upload</div>
-    <div style="color:#94a3b8;font-size:0.8rem">Latency: <?php echo $data['ping']; ?>ms</div>
-    <a href="index.html" class="btn">Test Again</a>
-    <div class="privacy-footer">
-        By using our speed test service, you agreed to our <a href="privacy.html" target="_blank">Privacy Policy</a>
+
+    <!-- Meta Info -->
+    <div class="meta">
+      <span>ISP:</span> <?= htmlspecialchars($result['isp']) ?><br>
+      <span>Test ID:</span> <?= htmlspecialchars($result['test_id']) ?>
     </div>
-</div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <a href="index.html" class="btn btn-primary">Run New Test</a>
+      <button class="btn btn-secondary" onclick="copyLink()">📋 Copy Link</button>
+    </div>
+
+    <div class="test-id">speed.hostingaura.com/results.php?id=<?= htmlspecialchars($testId) ?></div>
+
+  </div>
+
+  <script>
+    // Copy shareable link to clipboard
+    function copyLink() {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        alert('Link copied to clipboard!');
+      });
+    }
+  </script>
 </body>
 </html>
-<?php $conn->close(); ?>
