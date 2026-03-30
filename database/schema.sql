@@ -1,104 +1,125 @@
 -- ══════════════════════════════════════════════════════════════
--- schema.sql — Complete database schema for speed.hostingaura.com
--- Run this file once in phpMyAdmin to set up all tables
--- Location: Plesk → phpMyAdmin → speed_db → SQL tab → paste & run
+-- HOSTINGAURA SPEED TEST - COMPLETE DATABASE SCHEMA
+-- Safe to run multiple times - won't delete existing data
 -- ══════════════════════════════════════════════════════════════
 
--- Create and select database
-CREATE DATABASE IF NOT EXISTS speed_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE speed_db;
 
 -- ══════════════════════════════════════════════════════════════
 -- TABLE: users
--- Stores registered user accounts
--- Supports both email and phone registration (one or the other)
 -- ══════════════════════════════════════════════════════════════
+
 CREATE TABLE IF NOT EXISTS users (
-    id            INT AUTO_INCREMENT PRIMARY KEY,
-    email         VARCHAR(255) UNIQUE DEFAULT NULL,   -- NULL if registered via phone
-    phone         VARCHAR(20)  UNIQUE DEFAULT NULL,   -- NULL if registered via email
-    password_hash VARCHAR(255) NOT NULL,              -- BCRYPT hashed password
-    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_login    DATETIME DEFAULT NULL,              -- Updated on each login
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) UNIQUE DEFAULT NULL,
+    phone VARCHAR(20) UNIQUE DEFAULT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_login DATETIME DEFAULT NULL,
     INDEX idx_email (email),
     INDEX idx_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Add last_login column if it doesn't exist
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login DATETIME DEFAULT NULL AFTER created_at;
+
 -- ══════════════════════════════════════════════════════════════
 -- TABLE: speed_results
--- Stores every speed test result (guests and logged-in users)
--- user_id is NULL for guest tests
 -- ══════════════════════════════════════════════════════════════
+
 CREATE TABLE IF NOT EXISTS speed_results (
-    id             INT AUTO_INCREMENT PRIMARY KEY,
-    test_id        VARCHAR(8)    UNIQUE NOT NULL,     -- 8-char shareable ID
-    user_id        INT           DEFAULT NULL,         -- NULL for guest tests
-    ip_address     VARCHAR(45)   NOT NULL,             -- Supports IPv6
-    isp            VARCHAR(255),                       -- Internet Service Provider
-    download_speed DECIMAL(10,2),                     -- In Mbps
-    upload_speed   DECIMAL(10,2),                     -- In Mbps
-    ping           INT,                               -- In milliseconds
-    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_test_id    (test_id),
-    INDEX idx_user_id    (user_id),
-    INDEX idx_created_at (created_at),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    test_id VARCHAR(8) UNIQUE NOT NULL,
+    user_id INT DEFAULT NULL,
+    ip_address VARCHAR(45) NOT NULL,
+    isp VARCHAR(255),
+    download_speed DECIMAL(10,2),
+    upload_speed DECIMAL(10,2),
+    ping INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_test_id (test_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Add foreign key if it doesn't exist (will fail silently if exists)
+SET @query = IF(
+    NOT EXISTS(
+        SELECT NULL FROM information_schema.TABLE_CONSTRAINTS 
+        WHERE CONSTRAINT_SCHEMA = 'speed_db' 
+        AND TABLE_NAME = 'speed_results' 
+        AND CONSTRAINT_NAME = 'speed_results_ibfk_1'
+    ),
+    'ALTER TABLE speed_results ADD FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL',
+    'SELECT "Foreign key already exists"'
+);
+PREPARE stmt FROM @query;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- ══════════════════════════════════════════════════════════════
 -- TABLE: otp_verifications
--- Stores generated OTP codes during registration
--- verified=1 once the user enters the correct code
 -- ══════════════════════════════════════════════════════════════
+
 CREATE TABLE IF NOT EXISTS otp_verifications (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    contact    VARCHAR(255) NOT NULL,                 -- Email or phone number
-    otp_code   VARCHAR(6)   NOT NULL,                 -- 6-digit code
-    expires_at DATETIME     NOT NULL,                 -- OTP expiry time
-    verified   TINYINT(1)   DEFAULT 0,                -- 0=unused, 1=used
-    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_contact     (contact),
-    INDEX idx_expires     (expires_at),
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    contact VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(6) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    verified TINYINT(1) DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_contact (contact),
+    INDEX idx_expires (expires_at),
     INDEX idx_contact_otp (contact, otp_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Add columns if they don't exist
+ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS verified TINYINT(1) DEFAULT 0 AFTER expires_at;
+ALTER TABLE otp_verifications ADD COLUMN IF NOT EXISTS created_at DATETIME DEFAULT CURRENT_TIMESTAMP AFTER verified;
+
 -- ══════════════════════════════════════════════════════════════
 -- TABLE: otp_verification_attempts
--- Tracks wrong OTP attempts to prevent brute force attacks
--- Rate limit: max 5 attempts per 5 minutes (set in config.php)
 -- ══════════════════════════════════════════════════════════════
+
 CREATE TABLE IF NOT EXISTS otp_verification_attempts (
-    id           INT AUTO_INCREMENT PRIMARY KEY,
-    contact      VARCHAR(255) NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    contact VARCHAR(255) NOT NULL,
     attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_contact_time (contact, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ══════════════════════════════════════════════════════════════
 -- TABLE: login_attempts
--- Tracks failed login attempts per contact and IP address
--- Used for brute force protection and security alerts
 -- ══════════════════════════════════════════════════════════════
+
 CREATE TABLE IF NOT EXISTS login_attempts (
-    id           INT AUTO_INCREMENT PRIMARY KEY,
-    contact      VARCHAR(255) NOT NULL,
-    ip_address   VARCHAR(45),                         -- Supports IPv6
-    user_agent   VARCHAR(500),                        -- Browser info
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    contact VARCHAR(255) NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent VARCHAR(500),
     attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_contact_time (contact, attempted_at),
-    INDEX idx_ip_time      (ip_address, attempted_at)
+    INDEX idx_ip_time (ip_address, attempted_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Add columns if they don't exist
+ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS ip_address VARCHAR(45) AFTER contact;
+ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS user_agent VARCHAR(500) AFTER ip_address;
+
 -- ══════════════════════════════════════════════════════════════
--- SCHEDULED CLEANUP (run via cron job or manually)
--- Keeps the database clean from expired/old records
+-- VERIFICATION: Show all tables and their row counts
 -- ══════════════════════════════════════════════════════════════
 
--- Delete expired OTPs older than 1 hour:
--- DELETE FROM otp_verifications WHERE expires_at < NOW();
+SELECT 'Database schema updated successfully!' AS Status;
 
--- Delete old OTP attempts older than 24 hours:
--- DELETE FROM otp_verification_attempts WHERE attempted_at < DATE_SUB(NOW(), INTERVAL 24 HOUR);
+SHOW TABLES;
 
--- Delete old login attempts older than 24 hours:
--- DELETE FROM login_attempts WHERE attempted_at < DATE_SUB(NOW(), INTERVAL 24 HOUR);
+SELECT 'users' AS TableName, COUNT(*) AS RowCount FROM users
+UNION ALL
+SELECT 'speed_results', COUNT(*) FROM speed_results
+UNION ALL
+SELECT 'otp_verifications', COUNT(*) FROM otp_verifications
+UNION ALL
+SELECT 'otp_verification_attempts', COUNT(*) FROM otp_verification_attempts
+UNION ALL
+SELECT 'login_attempts', COUNT(*) FROM login_attempts;
