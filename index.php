@@ -680,6 +680,113 @@ let registerWidgetId = null;
 let forgotWidgetId = null;
 
 // ══════════════════════════════════════════════════════════════
+// DEVICE DETECTION
+// ══════════════════════════════════════════════════════════════
+function detectDevice() {
+  const ua = navigator.userAgent;
+  let browser = '';
+  
+  // Detect Browser
+  if (ua.indexOf('Brave') > -1 || (navigator.brave && navigator.brave.isBrave)) {
+    browser = 'Brave';
+  } else if (ua.indexOf('Edg') > -1) {
+    browser = 'Edge';
+  } else if (ua.indexOf('Chrome') > -1 && ua.indexOf('Safari') > -1) {
+    browser = 'Chrome';
+  } else if (ua.indexOf('Safari') > -1 && ua.indexOf('Chrome') === -1) {
+    browser = 'Safari';
+  } else if (ua.indexOf('Firefox') > -1) {
+    browser = 'Firefox';
+  } else if (ua.indexOf('Opera') > -1 || ua.indexOf('OPR') > -1) {
+    browser = 'Opera';
+  } else {
+    browser = 'Browser';
+  }
+  
+  let device = '';
+  
+  // Detect iOS Devices
+  if (/iPad/.test(ua)) {
+    const model = detectiPadModel();
+    device = `${browser} on ${model}`;
+    
+  } else if (/iPhone/.test(ua)) {
+    const model = detectiPhoneModel();
+    device = `${browser} on ${model}`;
+    
+  } else if (/Macintosh/.test(ua) && 'ontouchend' in document) {
+    device = `${browser} on iPad`;
+    
+  } else if (/Mac OS X/.test(ua)) {
+    device = `${browser} on Mac`;
+    
+  } else if (/Android/.test(ua)) {
+    const deviceMatch = ua.match(/;\s*([^;)]+)\s+Build/);
+    if (deviceMatch) {
+      device = `${browser} on ${deviceMatch[1]}`;
+    } else {
+      device = `${browser} on Android`;
+    }
+    
+  } else if (/Windows NT/.test(ua)) {
+    const winVersion = ua.match(/Windows NT (\d+\.\d+)/);
+    let winName = 'Windows';
+    if (winVersion) {
+      const ver = parseFloat(winVersion[1]);
+      if (ver >= 10) winName = 'Windows 11';
+      else if (ver >= 6.3) winName = 'Windows 10';
+      else if (ver >= 6.2) winName = 'Windows 8';
+    }
+    device = `${browser} on ${winName}`;
+    
+  } else if (/Linux/.test(ua) && !/Android/.test(ua)) {
+    device = `${browser} on Linux`;
+    
+  } else if (/CrOS/.test(ua)) {
+    device = `${browser} on Chromebook`;
+    
+  } else {
+    device = browser;
+  }
+  
+  return device;
+}
+
+function detectiPhoneModel() {
+  const width = window.screen.width;
+  const height = window.screen.height;
+  const ratio = window.devicePixelRatio;
+  
+  if (width === 440 && height === 956 && ratio === 3) return 'iPhone 16 Pro Max';
+  if (width === 402 && height === 874 && ratio === 3) return 'iPhone 16 Pro';
+  if (width === 430 && height === 932 && ratio === 3) return 'iPhone 16 Plus';
+  if (width === 393 && height === 852 && ratio === 3) return 'iPhone 16';
+  if (width === 430 && height === 932 && ratio === 3) return 'iPhone 15 Pro Max';
+  if (width === 393 && height === 852 && ratio === 3) return 'iPhone 15 Pro';
+  if (width === 428 && height === 926 && ratio === 3) return 'iPhone 14 Pro Max';
+  if (width === 390 && height === 844 && ratio === 3) return 'iPhone 14 Pro';
+  if (width === 414 && height === 896 && ratio === 3) return 'iPhone 11 Pro Max';
+  if (width === 414 && height === 896 && ratio === 2) return 'iPhone 11';
+  if (width === 375 && height === 667 && ratio === 2) return 'iPhone SE';
+  
+  return 'iPhone';
+}
+
+function detectiPadModel() {
+  const width = window.screen.width;
+  const height = window.screen.height;
+  const ratio = window.devicePixelRatio;
+  
+  if (width === 1024 && height === 1366 && ratio === 2) return 'iPad Pro 12.9"';
+  if (width === 834 && height === 1194 && ratio === 2) return 'iPad Pro 11"';
+  if (width === 820 && height === 1180 && ratio === 2) return 'iPad Air';
+  if (width === 744 && height === 1133 && ratio === 2) return 'iPad Mini';
+  if (width === 810 && height === 1080 && ratio === 2) return 'iPad';
+  
+  return 'iPad';
+}
+
+// ══════════════════════════════════════════════════════════════
 // TURNSTILE INITIALIZATION
 // ══════════════════════════════════════════════════════════════
 window.onTurnstileLoad = function() {
@@ -712,7 +819,6 @@ function renderTurnstileWidget(containerId, callbackName) {
   }
 }
 
-// Turnstile success callbacks
 window.onLoginTurnstileSuccess = function(token) {
   console.log('✅ Login Turnstile verified');
   loginTurnstileToken = token;
@@ -737,7 +843,6 @@ window.onForgotTurnstileSuccess = function(token) {
 function openModal(id) {
   document.getElementById(id).classList.add('active');
   
-  // Render Turnstile widget when modal opens
   setTimeout(() => {
     if (typeof turnstile !== 'undefined') {
       if (id === 'modal-login' && !loginWidgetId) {
@@ -755,7 +860,6 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('active');
   clearMessages();
   
-  // Reset Turnstile widgets
   if (typeof turnstile !== 'undefined') {
     try {
       if (id === 'modal-login' && loginWidgetId !== null) {
@@ -1394,6 +1498,10 @@ async function runTest() {
     
     document.getElementById('phase').textContent = "SAVING...";
     
+    // Detect device
+    const device = detectDevice();
+    console.log('Device detected:', device);
+    
     try {
       const saveResponse = await fetch('save_result.php', {
         method: 'POST',
@@ -1402,7 +1510,8 @@ async function runTest() {
           isp: document.getElementById('v-isp').textContent,
           dl: dlSpeed.toFixed(1),
           ul: ulSpeed.toFixed(1),
-          ping: Math.round(ping)
+          ping: Math.round(ping),
+          device: device
         })
       });
       
