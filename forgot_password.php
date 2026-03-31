@@ -2,16 +2,34 @@
 header("Content-Type: application/json");
 require_once 'config.php';
 
-// Database connection
+// ══════════════════════════════════════════════════════════════
+// DATABASE CONNECTION
+// ══════════════════════════════════════════════════════════════
+
 $conn = getDBConnection();
 if (!$conn) {
     echo json_encode(["status" => "error", "message" => "Server error. Please try again."]);
     exit;
 }
 
+// ══════════════════════════════════════════════════════════════
+// GET INPUT DATA
+// ══════════════════════════════════════════════════════════════
+
 $data = json_decode(file_get_contents('php://input'), true);
 $contact = trim($data['contact'] ?? '');
 $type = $data['type'] ?? 'email';
+$turnstileToken = $data['turnstile_token'] ?? '';
+
+// ══════════════════════════════════════════════════════════════
+// VERIFY CLOUDFLARE TURNSTILE
+// ══════════════════════════════════════════════════════════════
+
+if (!verifyTurnstile($turnstileToken)) {
+    echo json_encode(["status" => "error", "message" => "Security check failed. Please try again."]);
+    $conn->close();
+    exit;
+}
 
 // ══════════════════════════════════════════════════════════════
 // INPUT VALIDATION
@@ -19,6 +37,7 @@ $type = $data['type'] ?? 'email';
 
 if (empty($contact)) {
     echo json_encode(["status" => "error", "message" => "Contact information is required"]);
+    $conn->close();
     exit;
 }
 
@@ -26,12 +45,14 @@ if (empty($contact)) {
 if ($type === 'email') {
     if (!isValidEmail($contact)) {
         echo json_encode(["status" => "error", "message" => "Invalid email address"]);
+        $conn->close();
         exit;
     }
 } elseif ($type === 'sms') {
     $contact = cleanPhone($contact);
     if (!isValidPhone($contact)) {
         echo json_encode(["status" => "error", "message" => "Invalid phone number"]);
+        $conn->close();
         exit;
     }
 }

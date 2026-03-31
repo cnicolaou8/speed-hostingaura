@@ -29,6 +29,10 @@ if ($isLoggedIn) {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="cf-2fa-verify" content="no-analytics"/>
 <title>Speed Test — HostingAura</title>
+
+<!-- CLOUDFLARE TURNSTILE -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
 <style>
 /* ══════════════════════════════════════════════════════════════
    RESET & BASE STYLES
@@ -351,6 +355,15 @@ body{
 }
 
 /* ══════════════════════════════════════════════════════════════
+   TURNSTILE WIDGET
+   ══════════════════════════════════════════════════════════════ */
+.turnstile-widget{
+  margin:14px 0;
+  display:flex;
+  justify-content:center;
+}
+
+/* ══════════════════════════════════════════════════════════════
    LOCKOUT TIMER
    ══════════════════════════════════════════════════════════════ */
 .lockout-timer{
@@ -378,7 +391,7 @@ body{
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
-     AUTH BAR (Dynamic based on login state)
+     AUTH BAR
      ══════════════════════════════════════════════════════════════ -->
 <div class="auth-bar" id="auth-bar">
   <?php if ($isLoggedIn): ?>
@@ -502,10 +515,18 @@ body{
       <label>Password</label>
       <input type="password" id="login-pass" placeholder="••••••••"/>
     </div>
-    <button class="form-submit" id="login-submit" onclick="submitLogin()">Log In</button>
+    
+    <!-- TURNSTILE WIDGET -->
+    <div class="turnstile-widget">
+      <div class="cf-turnstile" 
+           data-sitekey="<?= TURNSTILE_SITE_KEY ?>" 
+           data-callback="onLoginTurnstileSuccess"
+           data-theme="dark"></div>
+    </div>
+    
+    <button class="form-submit" id="login-submit" onclick="submitLogin()" disabled>Log In</button>
     <div class="modal-msg" id="login-msg"></div>
     
-    <!-- Forgot Password Link -->
     <div style="text-align:center;margin-top:10px;">
       <a onclick="switchModal('modal-login','modal-forgot')" 
          style="color:#6366f1;font-size:0.7rem;cursor:pointer;text-decoration:none;">
@@ -536,7 +557,16 @@ body{
       <label id="contact-label">Email Address</label>
       <input type="email" id="reg-contact" placeholder="you@example.com"/>
     </div>
-    <button class="form-submit" id="reg-send-btn" onclick="sendOtp()">
+    
+    <!-- TURNSTILE WIDGET -->
+    <div class="turnstile-widget">
+      <div class="cf-turnstile" 
+           data-sitekey="<?= TURNSTILE_SITE_KEY ?>" 
+           data-callback="onRegisterTurnstileSuccess"
+           data-theme="dark"></div>
+    </div>
+    
+    <button class="form-submit" id="reg-send-btn" onclick="sendOtp()" disabled>
       Send Verification Code
     </button>
     <div class="modal-msg" id="reg-msg"></div>
@@ -597,7 +627,16 @@ body{
       <label id="forgot-contact-label">Email Address</label>
       <input type="email" id="forgot-contact" placeholder="you@example.com"/>
     </div>
-    <button class="form-submit" id="forgot-submit" onclick="submitForgotPassword()">
+    
+    <!-- TURNSTILE WIDGET -->
+    <div class="turnstile-widget">
+      <div class="cf-turnstile" 
+           data-sitekey="<?= TURNSTILE_SITE_KEY ?>" 
+           data-callback="onForgotTurnstileSuccess"
+           data-theme="dark"></div>
+    </div>
+    
+    <button class="form-submit" id="forgot-submit" onclick="submitForgotPassword()" disabled>
       Send Reset Code
     </button>
     <div class="modal-msg" id="forgot-msg"></div>
@@ -639,6 +678,28 @@ body{
 
 <script>
 // ══════════════════════════════════════════════════════════════
+// TURNSTILE TOKENS
+// ══════════════════════════════════════════════════════════════
+let loginTurnstileToken = null;
+let registerTurnstileToken = null;
+let forgotTurnstileToken = null;
+
+function onLoginTurnstileSuccess(token) {
+  loginTurnstileToken = token;
+  document.getElementById('login-submit').disabled = false;
+}
+
+function onRegisterTurnstileSuccess(token) {
+  registerTurnstileToken = token;
+  document.getElementById('reg-send-btn').disabled = false;
+}
+
+function onForgotTurnstileSuccess(token) {
+  forgotTurnstileToken = token;
+  document.getElementById('forgot-submit').disabled = false;
+}
+
+// ══════════════════════════════════════════════════════════════
 // AUTH STATE
 // ══════════════════════════════════════════════════════════════
 let currentUser = <?= $isLoggedIn ? '"' . htmlspecialchars($userContact, ENT_QUOTES) . '"' : 'null' ?>;
@@ -655,11 +716,27 @@ function openModal(id) {
 function closeModal(id) {
   document.getElementById(id).classList.remove('active');
   clearMessages();
+  
+  // Reset Turnstile widgets
+  if (typeof turnstile !== 'undefined') {
+    try {
+      turnstile.reset();
+    } catch(e) {}
+  }
+  
+  // Reset tokens and disable buttons
+  loginTurnstileToken = null;
+  registerTurnstileToken = null;
+  forgotTurnstileToken = null;
+  
+  document.getElementById('login-submit').disabled = true;
+  document.getElementById('reg-send-btn').disabled = true;
+  document.getElementById('forgot-submit').disabled = true;
 }
 
 function switchModal(from, to) {
   closeModal(from);
-  openModal(to);
+  setTimeout(() => openModal(to), 100);
 }
 
 function clearMessages() {
@@ -711,6 +788,11 @@ async function sendOtp() {
     return;
   }
   
+  if (!registerTurnstileToken) {
+    setMsg('reg-msg', 'Please complete the security check', 'error');
+    return;
+  }
+  
   const btn = document.getElementById('reg-send-btn');
   btn.disabled = true;
   btn.textContent = 'Sending...';
@@ -719,7 +801,11 @@ async function sendOtp() {
     const r = await fetch('sent_otp.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact, type: otpType })
+      body: JSON.stringify({ 
+        contact, 
+        type: otpType,
+        turnstile_token: registerTurnstileToken
+      })
     });
     const d = await r.json();
     
@@ -728,12 +814,21 @@ async function sendOtp() {
       switchModal('modal-register', 'modal-verify');
     } else {
       setMsg('reg-msg', d.message || 'Failed to send code', 'error');
+      if (typeof turnstile !== 'undefined') {
+        turnstile.reset();
+      }
+      registerTurnstileToken = null;
+      btn.disabled = true;
     }
   } catch (e) {
     setMsg('reg-msg', 'Network error. Please try again.', 'error');
+    if (typeof turnstile !== 'undefined') {
+      turnstile.reset();
+    }
+    registerTurnstileToken = null;
+    btn.disabled = true;
   }
   
-  btn.disabled = false;
   btn.textContent = 'Send Verification Code';
 }
 
@@ -794,6 +889,11 @@ async function submitLogin() {
     return;
   }
   
+  if (!loginTurnstileToken) {
+    setMsg('login-msg', 'Please complete the security check', 'error');
+    return;
+  }
+  
   const btn = document.getElementById('login-submit');
   btn.disabled = true;
   btn.textContent = 'Logging in...';
@@ -802,7 +902,11 @@ async function submitLogin() {
     const r = await fetch('login.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact, password: pass })
+      body: JSON.stringify({ 
+        contact, 
+        password: pass,
+        turnstile_token: loginTurnstileToken
+      })
     });
     const d = await r.json();
     
@@ -816,13 +920,19 @@ async function submitLogin() {
       
     } else {
       setMsg('login-msg', d.message || 'Login failed', 'error');
-      btn.disabled = false;
-      btn.textContent = 'Log In';
+      if (typeof turnstile !== 'undefined') {
+        turnstile.reset();
+      }
+      loginTurnstileToken = null;
+      btn.disabled = true;
     }
   } catch (e) {
     setMsg('login-msg', 'Network error. Please try again.', 'error');
-    btn.disabled = false;
-    btn.textContent = 'Log In';
+    if (typeof turnstile !== 'undefined') {
+      turnstile.reset();
+    }
+    loginTurnstileToken = null;
+    btn.disabled = true;
   }
 }
 
@@ -853,8 +963,10 @@ function startLockoutTimer(seconds, message) {
       lockoutInterval = null;
       msgEl.textContent = '';
       msgEl.className = 'modal-msg';
-      btn.disabled = false;
-      btn.textContent = 'Log In';
+      if (typeof turnstile !== 'undefined') {
+        turnstile.reset();
+      }
+      loginTurnstileToken = null;
     } else {
       updateDisplay(remaining);
     }
@@ -894,6 +1006,11 @@ async function submitForgotPassword() {
     return;
   }
   
+  if (!forgotTurnstileToken) {
+    setMsg('forgot-msg', 'Please complete the security check', 'error');
+    return;
+  }
+  
   const btn = document.getElementById('forgot-submit');
   btn.disabled = true;
   btn.textContent = 'Sending...';
@@ -902,7 +1019,11 @@ async function submitForgotPassword() {
     const r = await fetch('forgot_password.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contact, type: forgotType })
+      body: JSON.stringify({ 
+        contact, 
+        type: forgotType,
+        turnstile_token: forgotTurnstileToken
+      })
     });
     const d = await r.json();
     
@@ -911,12 +1032,21 @@ async function submitForgotPassword() {
       switchModal('modal-forgot', 'modal-reset');
     } else {
       setMsg('forgot-msg', d.message || 'Failed to send reset code', 'error');
+      if (typeof turnstile !== 'undefined') {
+        turnstile.reset();
+      }
+      forgotTurnstileToken = null;
+      btn.disabled = true;
     }
   } catch (e) {
     setMsg('forgot-msg', 'Network error. Please try again.', 'error');
+    if (typeof turnstile !== 'undefined') {
+      turnstile.reset();
+    }
+    forgotTurnstileToken = null;
+    btn.disabled = true;
   }
   
-  btn.disabled = false;
   btn.textContent = 'Send Reset Code';
 }
 
