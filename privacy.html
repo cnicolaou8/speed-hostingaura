@@ -20,7 +20,7 @@ a:hover{text-decoration:underline}
 </head>
 <body>
 <h1>Privacy Policy</h1>
-<p class="last-updated"><strong>Last Updated:</strong> March 29, 2026</p>
+<p class="last-updated"><strong>Last Updated:</strong> March 31, 2026</p>
 
 <p>This Privacy Policy explains how <strong>HostingAura</strong> ("we", "us", "our") collects, uses, and protects your information when you use our speed test service at <strong>speed.hostingaura.com</strong>.</p>
 
@@ -35,53 +35,85 @@ a:hover{text-decoration:underline}
 </ul>
 <p><strong>For registered users:</strong></p>
 <ul>
-    <li>Email address or phone number (used for account creation and OTP verification)</li>
+    <li>Email address or phone number (used for account creation, login verification, and password reset)</li>
     <li>Encrypted password (we never store plain-text passwords)</li>
     <li>All speed test results linked to your account</li>
-    <li>Account creation date</li>
+    <li>Account creation date and last login timestamp</li>
+    <li>Login attempt records (IP address, user agent, timestamp) for security purposes</li>
 </ul>
 
 <h2>2. OTP Verification & Communications</h2>
-<p>When you register for an account, we send a one-time password (OTP) to verify your identity. This is sent via:</p>
+<p>We send one-time passwords (OTP) for the following purposes:</p>
+<ul>
+    <li><strong>Account Registration</strong> — to verify your email or phone number</li>
+    <li><strong>Password Reset</strong> — to securely reset your password if you forget it</li>
+</ul>
+<p>OTPs are delivered via:</p>
 <ul>
     <li><strong>Email</strong> — sent from <a href="mailto:noreply@hostingaura.com">noreply@hostingaura.com</a></li>
     <li><strong>SMS</strong> — sent from HostingAura to the phone number you provide</li>
 </ul>
 <div class="highlight">
-    📨 OTP messages are sent through <strong>ClickSend</strong>, our third-party communication provider. Your email or phone number is transmitted to ClickSend solely for the purpose of delivering the verification code. ClickSend does not use your data for marketing or any other purpose. Learn more at <a href="https://www.clicksend.com/privacy-policy" target="_blank">clicksend.com/privacy-policy</a>.
+    📨 OTP messages are sent through <strong>ClickSend</strong>, our third-party communication provider. Your email or phone number is transmitted to ClickSend solely for the purpose of delivering verification codes. ClickSend does not use your data for marketing or any other purpose. Learn more at <a href="https://www.clicksend.com/privacy-policy" target="_blank">clicksend.com/privacy-policy</a>.
 </div>
 <p>OTP codes expire within <strong>10 minutes</strong> and are permanently invalidated after use.</p>
 
-<h2>3. How We Use Your Information</h2>
+<h2>3. Security Monitoring & Alerts</h2>
+<p>To protect your account, we monitor and log:</p>
+<ul>
+    <li><strong>Login attempts</strong> — including IP address, user agent, and timestamp</li>
+    <li><strong>Failed authentication attempts</strong> — to detect and prevent unauthorized access</li>
+    <li><strong>Password reset requests</strong> — to prevent abuse</li>
+</ul>
+<p>We may send you <strong>security alerts</strong> via email or SMS when we detect suspicious activity, such as:</p>
+<ul>
+    <li>Multiple failed login attempts from your account</li>
+    <li>Account lockout due to repeated failed authentication</li>
+</ul>
+<p>These alerts are sent to help protect your account and cannot be disabled.</p>
+
+<h2>4. How We Use Your Information</h2>
 <ul>
     <li>Provide accurate speed test results</li>
     <li>Generate shareable result links</li>
     <li>Store your test history when you have an account</li>
-    <li>Verify your identity during registration via OTP</li>
+    <li>Verify your identity during registration and password reset via OTP</li>
+    <li>Protect your account from unauthorized access</li>
+    <li>Send security alerts about suspicious activity</li>
+    <li>Enforce rate limits to prevent abuse</li>
     <li>Improve our service quality and analyze network performance trends</li>
 </ul>
 
-<h2>4. Data Storage & Security</h2>
-<p>All data is stored in a secure database hosted on our servers. Passwords are hashed using <strong>bcrypt</strong> and are never stored in plain text. OTP verification records are stored temporarily and marked as used immediately after verification.</p>
+<h2>5. Data Storage & Security</h2>
+<p>All data is stored in a secure database hosted on our servers. Security measures include:</p>
+<ul>
+    <li>Passwords are hashed using <strong>bcrypt</strong> and are never stored in plain text</li>
+    <li>OTP verification records expire after 10 minutes and are marked as used immediately after verification</li>
+    <li>Login attempt logs are automatically cleaned after 24 hours</li>
+    <li>Rate limiting protects against brute-force attacks</li>
+    <li>Session tokens are regenerated after login to prevent session fixation</li>
+</ul>
 <p>Guest test results are stored with a unique test ID but are <strong>not linked to any personal identity</strong>. Registered user results are linked to your account and accessible only when logged in.</p>
 
-<h2>5. Third-Party Services</h2>
+<h2>6. Third-Party Services</h2>
 <p>We use the following third-party services that may process your data:</p>
 <ul>
-    <li><strong>ClickSend</strong> — for OTP delivery via email and SMS</li>
+    <li><strong>ClickSend</strong> — for OTP delivery and security alerts via email and SMS</li>
     <li><strong>Cloudflare</strong> — for CDN, DDoS protection, and IP/location detection</li>
     <li><strong>ipapi.co / ip-api.com</strong> — for ISP detection during the speed test</li>
 </ul>
 <p>We do not sell, trade, or share your personal information with any third parties beyond what is necessary to operate the service.</p>
 
-<h2>6. Data Retention</h2>
+<h2>7. Data Retention</h2>
 <ul>
     <li><strong>Guest test results</strong> — retained indefinitely for service improvement; not linked to personal identity</li>
     <li><strong>Account data</strong> — retained until you request deletion</li>
-    <li><strong>OTP records</strong> — automatically expire after 10 minutes</li>
+    <li><strong>OTP records</strong> — automatically expire and are deleted after 10 minutes</li>
+    <li><strong>Login attempt logs</strong> — automatically deleted after 24 hours</li>
+    <li><strong>Password reset attempt logs</strong> — automatically deleted after 24 hours</li>
 </ul>
 
-<h2>7. Your Rights (GDPR)</h2>
+<h2>8. Your Rights (GDPR)</h2>
 <p>Under GDPR and applicable data protection laws, you have the right to:</p>
 <ul>
     <li>Access the personal data we hold about you</li>
@@ -89,14 +121,25 @@ a:hover{text-decoration:underline}
     <li>Request deletion of your account and all associated data</li>
     <li>Withdraw consent at any time by deleting your account</li>
     <li>Opt-out of data collection entirely by using the service as a guest (no account)</li>
+    <li>Object to automated decision-making (we do not use automated decision-making)</li>
 </ul>
+<p>To exercise any of these rights, please contact us at <a href="mailto:privacy@hostingaura.com">privacy@hostingaura.com</a>.</p>
 
-<h2>8. Cookies & Local Storage</h2>
-<p>We use <strong>browser localStorage</strong> to save your last 5 speed test results locally on your device for guest users. This data never leaves your browser and can be cleared at any time by clearing your browser storage. We do not use tracking cookies.</p>
+<h2>9. Cookies & Local Storage</h2>
+<p>We use <strong>browser localStorage</strong> to save your last 5 speed test results locally on your device for guest users. This data never leaves your browser and can be cleared at any time by clearing your browser storage.</p>
+<p>We use <strong>session cookies</strong> to keep you logged in when you have an account. These cookies are deleted when you log out or close your browser. We do not use tracking cookies or third-party analytics.</p>
 
-<h2>9. Contact Us</h2>
-<p>For privacy-related inquiries, data access requests, or account deletion, please contact us at: <a href="mailto:privacy@hostingaura.com">privacy@hostingaura.com</a></p>
+<h2>10. International Data Transfers</h2>
+<p>Your data is stored on servers located in the European Union. When you use SMS verification, your phone number is transmitted to ClickSend, which may process data in other jurisdictions. ClickSend is GDPR-compliant and uses appropriate safeguards for international data transfers.</p>
 
-<a href="index.html" class="back-btn">Back to Speed Test</a>
+<h2>11. Changes to This Policy</h2>
+<p>We may update this Privacy Policy from time to time. The "Last Updated" date at the top of this page indicates when the policy was last revised. Continued use of our service after changes constitutes acceptance of the updated policy.</p>
+
+<h2>12. Contact Us</h2>
+<p>For privacy-related inquiries, data access requests, or account deletion, please contact us at:</p>
+<p><strong>Email:</strong> <a href="mailto:privacy@hostingaura.com">privacy@hostingaura.com</a><br>
+<strong>Website:</strong> <a href="https://hostingaura.com">hostingaura.com</a></p>
+
+<a href="index.php" class="back-btn">Back to Speed Test</a>
 </body>
 </html>
