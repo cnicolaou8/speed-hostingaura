@@ -37,23 +37,44 @@ if (strlen($newPassword) < 8) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// RATE LIMITING: Max 5 verification attempts per 5 minutes
+// RATE LIMITING: Max 5 verification attempts per 15 minutes
 // ══════════════════════════════════════════════════════════════
 
-$fiveMinutesAgo = date('Y-m-d H:i:s', strtotime('-5 minutes'));
+$fifteenMinutesAgo = date('Y-m-d H:i:s', strtotime('-15 minutes'));
 $stmt_rate = $conn->prepare("SELECT COUNT(*) as attempts 
                               FROM otp_verification_attempts 
                               WHERE contact = ? AND attempted_at > ?");
-$stmt_rate->bind_param("ss", $contact, $fiveMinutesAgo);
+$stmt_rate->bind_param("ss", $contact, $fifteenMinutesAgo);
 $stmt_rate->execute();
 $attempts = $stmt_rate->get_result()->fetch_assoc()['attempts'];
 $stmt_rate->close();
 
 if ($attempts >= OTP_MAX_ATTEMPTS) {
-    echo json_encode([
-        "status" => "error",
-        "message" => "Too many attempts. Please request a new code."
-    ]);
+    // Calculate time remaining
+    $stmt_last = $conn->prepare("SELECT attempted_at FROM otp_verification_attempts 
+                                  WHERE contact = ? AND attempted_at > ? 
+                                  ORDER BY attempted_at ASC LIMIT 1");
+    $stmt_last->bind_param("ss", $contact, $fifteenMinutesAgo);
+    $stmt_last->execute();
+    $last_attempt = $stmt_last->get_result()->fetch_assoc();
+    $stmt_last->close();
+    
+    if ($last_attempt) {
+        $unlock_time = strtotime($last_attempt['attempted_at']) + 900; // 15 minutes (900 seconds)
+        $seconds_left = max(0, $unlock_time - time());
+        $minutes_left = ceil($seconds_left / 60);
+        
+        echo json_encode([
+            "status" => "error",
+            "message" => "Too many failed attempts. Please wait $minutes_left minute(s) before trying again."
+        ]);
+    } else {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Too many attempts. Please try again in 15 minutes."
+        ]);
+    }
+    
     $conn->close();
     exit;
 }
@@ -121,7 +142,9 @@ if ($user) {
     $stmt_login->execute();
     $stmt_login->close();
     
-    // Clear verification attempts
+    // ══════════════════════════════════════════════════════════════
+    // CLEAR ALL VERIFICATION ATTEMPTS (Important!)
+    // ══════════════════════════════════════════════════════════════
     $stmt_clear = $conn->prepare("DELETE FROM otp_verification_attempts WHERE contact = ?");
     $stmt_clear->bind_param("s", $contact);
     $stmt_clear->execute();

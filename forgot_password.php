@@ -37,6 +37,51 @@ if ($type === 'email') {
 }
 
 // ══════════════════════════════════════════════════════════════
+// CHECK VERIFICATION RATE LIMIT FIRST (Before sending OTP!)
+// 15-MINUTE LOCKOUT after 5 failed attempts
+// This prevents charging for OTPs the user can't use
+// ══════════════════════════════════════════════════════════════
+
+$fifteenMinutesAgo = date('Y-m-d H:i:s', strtotime('-15 minutes'));
+$stmt_verify_rate = $conn->prepare("SELECT COUNT(*) as attempts 
+                                     FROM otp_verification_attempts 
+                                     WHERE contact = ? AND attempted_at > ?");
+$stmt_verify_rate->bind_param("ss", $contact, $fifteenMinutesAgo);
+$stmt_verify_rate->execute();
+$verify_attempts = $stmt_verify_rate->get_result()->fetch_assoc()['attempts'];
+$stmt_verify_rate->close();
+
+if ($verify_attempts >= OTP_MAX_ATTEMPTS) {
+    // Calculate time remaining
+    $stmt_last = $conn->prepare("SELECT attempted_at FROM otp_verification_attempts 
+                                  WHERE contact = ? AND attempted_at > ? 
+                                  ORDER BY attempted_at ASC LIMIT 1");
+    $stmt_last->bind_param("ss", $contact, $fifteenMinutesAgo);
+    $stmt_last->execute();
+    $last_attempt = $stmt_last->get_result()->fetch_assoc();
+    $stmt_last->close();
+    
+    if ($last_attempt) {
+        $unlock_time = strtotime($last_attempt['attempted_at']) + 900; // 15 minutes (900 seconds)
+        $seconds_left = max(0, $unlock_time - time());
+        $minutes_left = ceil($seconds_left / 60);
+        
+        echo json_encode([
+            "status" => "error",
+            "message" => "Too many failed attempts. Please wait $minutes_left minute(s) before requesting a new code."
+        ]);
+    } else {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Too many failed attempts. Please try again in 15 minutes."
+        ]);
+    }
+    
+    $conn->close();
+    exit;
+}
+
+// ══════════════════════════════════════════════════════════════
 // CHECK IF USER EXISTS (but don't reveal if they don't!)
 // ══════════════════════════════════════════════════════════════
 
@@ -47,11 +92,8 @@ $stmt_check->store_result();
 $userExists = $stmt_check->num_rows > 0;
 $stmt_check->close();
 
-// SECURITY: Always act like the OTP was sent (don't reveal if account exists)
-// This prevents user enumeration attacks
-
 // ══════════════════════════════════════════════════════════════
-// RATE LIMITING: Max 3 password reset requests per hour
+// RATE LIMITING: Max 3 password reset OTP requests per hour
 // ══════════════════════════════════════════════════════════════
 
 $oneHourAgo = date('Y-m-d H:i:s', strtotime('-1 hour'));
