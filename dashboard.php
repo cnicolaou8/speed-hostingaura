@@ -198,7 +198,7 @@ $results = $stmt_results->get_result();
       </div>
       <div class="user-info">
         <span class="username">👤 <?= htmlspecialchars($username) ?></span>
-        <a href="index.html" class="btn btn-primary">Run Test</a>
+        <a href="index.php" class="btn btn-primary">Run Test</a>
         <a href="logout.php" class="btn btn-secondary">Logout</a>
       </div>
     </div>
