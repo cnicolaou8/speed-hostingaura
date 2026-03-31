@@ -1,3 +1,27 @@
+<?php
+session_start();
+require_once 'config.php';
+
+// Check if user is logged in
+$isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+$userId = $isLoggedIn ? intval($_SESSION['user_id']) : null;
+
+// Get user info if logged in
+$userContact = '';
+if ($isLoggedIn) {
+    $conn = getDBConnection();
+    if ($conn) {
+        $stmt = $conn->prepare("SELECT email, phone FROM users WHERE id = ?");
+        $stmt->bind_param("i", $userId);
+        $stmt->execute();
+        $result = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        $conn->close();
+        
+        $userContact = $result['email'] ?? $result['phone'] ?? '';
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -186,7 +210,16 @@ body{
   <div class="logo-sub">Enterprise Speed Test</div>
 </div>
 
-<div class="auth-bar" id="auth-bar"></div>
+<div class="auth-bar" id="auth-bar">
+  <?php if ($isLoggedIn): ?>
+    <span class="user-info">👤 <span><?= htmlspecialchars($userContact) ?></span></span>
+    <a href="dashboard.php" class="dashboard-btn">My History</a>
+    <button class="auth-btn danger" onclick="doLogout()">Logout</button>
+  <?php else: ?>
+    <button class="auth-btn" onclick="openModal('modal-login')">Log In</button>
+    <button class="auth-btn primary" onclick="openModal('modal-register')">Sign Up</button>
+  <?php endif; ?>
+</div>
 
 <div class="infobar">
   <div class="badge"><span class="lbl">IP</span><span id="v-ip">...</span></div>
@@ -300,34 +333,8 @@ body{
 
 <script>
 /* ── AUTH STATE ── */
-let currentUser  = null;
-let otpType      = 'email';
-let loginType    = 'email';
-
-async function checkSession() {
-  try {
-    const r = await fetch('check_session.php');
-    const d = await r.json();
-    if (d.logged_in) currentUser = d.email;
-  } catch(e) {}
-  renderAuthBar();
-}
-
-function renderAuthBar() {
-  const bar = document.getElementById('auth-bar');
-  if (currentUser) {
-    bar.innerHTML = `
-      <span class="user-info">👤 <span>${currentUser}</span></span>
-      <a href="dashboard.php" class="dashboard-btn">My History</a>
-      <button class="auth-btn danger" onclick="doLogout()">Logout</button>
-    `;
-  } else {
-    bar.innerHTML = `
-      <button class="auth-btn" onclick="openModal('modal-login')">Log In</button>
-      <button class="auth-btn primary" onclick="openModal('modal-register')">Sign Up</button>
-    `;
-  }
-}
+let currentUser = <?= $isLoggedIn ? '"' . htmlspecialchars($userContact, ENT_QUOTES) . '"' : 'null' ?>;
+let otpType = 'email';
 
 function openModal(id)       { document.getElementById(id).classList.add('active'); }
 function closeModal(id)      { document.getElementById(id).classList.remove('active'); clearMessages(); }
@@ -342,20 +349,6 @@ function setMsg(id, text, type) {
   const el = document.getElementById(id);
   el.textContent = text;
   el.className = 'modal-msg ' + type;
-}
-
-/* ── LOGIN TYPE TOGGLE ── */
-function setLoginType(type) {
-  loginType = type;
-  document.getElementById('login-tog-email').classList.toggle('active', type === 'email');
-  document.getElementById('login-tog-sms').classList.toggle('active', type === 'sms');
-  const input = document.getElementById('login-contact');
-  const label = document.getElementById('login-contact-label');
-  if (type === 'email') {
-    input.type = 'email'; input.placeholder = 'you@example.com'; label.textContent = 'Email Address';
-  } else {
-    input.type = 'tel'; input.placeholder = '+357 99 000000'; label.textContent = 'Phone Number';
-  }
 }
 
 /* ── SIGNUP OTP TYPE TOGGLE ── */
@@ -414,9 +407,8 @@ async function submitVerify() {
     });
     const d = await r.json();
     if (d.status === 'success') {
-      setMsg('verify-msg', '✅ Account created! Logging you in...', 'success');
-      currentUser = contact;
-      setTimeout(() => { closeModal('modal-verify'); renderAuthBar(); }, 1500);
+      setMsg('verify-msg', '✅ Account created! Redirecting...', 'success');
+      setTimeout(() => { window.location.reload(); }, 1500);
     } else {
       setMsg('verify-msg', d.message || 'Verification failed', 'error');
     }
@@ -444,10 +436,8 @@ async function submitLogin() {
     const d = await r.json();
 
     if (d.status === 'success') {
-      setMsg('login-msg', '✅ Logged in!', 'success');
-      currentUser = contact;
-      setTimeout(() => { closeModal('modal-login'); renderAuthBar(); }, 1000);
-      btn.disabled = false; btn.textContent = 'Log In';
+      setMsg('login-msg', '✅ Logged in! Redirecting...', 'success');
+      setTimeout(() => { window.location.reload(); }, 1000);
 
     } else if (d.status === 'locked') {
       startLockoutTimer(d.seconds_left, d.message);
@@ -464,7 +454,6 @@ async function submitLogin() {
 }
 
 function startLockoutTimer(seconds, message) {
-  // Clear any existing timer
   if (lockoutInterval) clearInterval(lockoutInterval);
 
   const btn = document.getElementById('login-submit');
@@ -502,8 +491,7 @@ function startLockoutTimer(seconds, message) {
 /* ── LOGOUT ── */
 async function doLogout() {
   await fetch('logout.php');
-  currentUser = null;
-  renderAuthBar();
+  window.location.reload();
 }
 
 /* ── SPEED TEST ENGINE ── */
@@ -744,7 +732,6 @@ document.querySelectorAll('.modal-overlay').forEach(overlay => {
 detectBrave();
 fetchInfo();
 renderHistory();
-checkSession();
 </script>
 </body>
 </html>
