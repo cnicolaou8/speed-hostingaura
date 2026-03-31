@@ -31,7 +31,7 @@ if ($isLoggedIn) {
 <title>Speed Test — HostingAura</title>
 
 <!-- CLOUDFLARE TURNSTILE -->
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" async defer></script>
 
 <style>
 /* ══════════════════════════════════════════════════════════════
@@ -361,6 +361,7 @@ body{
   margin:14px 0;
   display:flex;
   justify-content:center;
+  min-height:65px;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -517,12 +518,7 @@ body{
     </div>
     
     <!-- TURNSTILE WIDGET -->
-    <div class="turnstile-widget">
-      <div class="cf-turnstile" 
-           data-sitekey="<?= TURNSTILE_SITE_KEY ?>" 
-           data-callback="onLoginTurnstileSuccess"
-           data-theme="dark"></div>
-    </div>
+    <div class="turnstile-widget" id="login-turnstile-container"></div>
     
     <button class="form-submit" id="login-submit" onclick="submitLogin()" disabled>Log In</button>
     <div class="modal-msg" id="login-msg"></div>
@@ -559,12 +555,7 @@ body{
     </div>
     
     <!-- TURNSTILE WIDGET -->
-    <div class="turnstile-widget">
-      <div class="cf-turnstile" 
-           data-sitekey="<?= TURNSTILE_SITE_KEY ?>" 
-           data-callback="onRegisterTurnstileSuccess"
-           data-theme="dark"></div>
-    </div>
+    <div class="turnstile-widget" id="register-turnstile-container"></div>
     
     <button class="form-submit" id="reg-send-btn" onclick="sendOtp()" disabled>
       Send Verification Code
@@ -629,12 +620,7 @@ body{
     </div>
     
     <!-- TURNSTILE WIDGET -->
-    <div class="turnstile-widget">
-      <div class="cf-turnstile" 
-           data-sitekey="<?= TURNSTILE_SITE_KEY ?>" 
-           data-callback="onForgotTurnstileSuccess"
-           data-theme="dark"></div>
-    </div>
+    <div class="turnstile-widget" id="forgot-turnstile-container"></div>
     
     <button class="form-submit" id="forgot-submit" onclick="submitForgotPassword()" disabled>
       Send Reset Code
@@ -678,39 +664,91 @@ body{
 
 <script>
 // ══════════════════════════════════════════════════════════════
-// TURNSTILE TOKENS
+// GLOBAL VARIABLES
 // ══════════════════════════════════════════════════════════════
-let loginTurnstileToken = null;
-let registerTurnstileToken = null;
-let forgotTurnstileToken = null;
-
-function onLoginTurnstileSuccess(token) {
-  loginTurnstileToken = token;
-  document.getElementById('login-submit').disabled = false;
-}
-
-function onRegisterTurnstileSuccess(token) {
-  registerTurnstileToken = token;
-  document.getElementById('reg-send-btn').disabled = false;
-}
-
-function onForgotTurnstileSuccess(token) {
-  forgotTurnstileToken = token;
-  document.getElementById('forgot-submit').disabled = false;
-}
-
-// ══════════════════════════════════════════════════════════════
-// AUTH STATE
-// ══════════════════════════════════════════════════════════════
+const TURNSTILE_SITE_KEY = '<?= TURNSTILE_SITE_KEY ?>';
 let currentUser = <?= $isLoggedIn ? '"' . htmlspecialchars($userContact, ENT_QUOTES) . '"' : 'null' ?>;
 let otpType = 'email';
 let forgotType = 'email';
+
+// Turnstile state
+let loginTurnstileToken = null;
+let registerTurnstileToken = null;
+let forgotTurnstileToken = null;
+let loginWidgetId = null;
+let registerWidgetId = null;
+let forgotWidgetId = null;
+
+// ══════════════════════════════════════════════════════════════
+// TURNSTILE INITIALIZATION
+// ══════════════════════════════════════════════════════════════
+window.onTurnstileLoad = function() {
+  console.log('✅ Turnstile script loaded');
+};
+
+function renderTurnstileWidget(containerId, callbackName) {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    console.error('Container not found:', containerId);
+    return null;
+  }
+  
+  if (typeof turnstile === 'undefined') {
+    console.error('Turnstile not loaded yet');
+    return null;
+  }
+  
+  try {
+    const widgetId = turnstile.render(container, {
+      sitekey: TURNSTILE_SITE_KEY,
+      theme: 'dark',
+      callback: window[callbackName]
+    });
+    console.log(`✅ Rendered ${containerId} widget:`, widgetId);
+    return widgetId;
+  } catch (e) {
+    console.error(`❌ Failed to render ${containerId}:`, e);
+    return null;
+  }
+}
+
+// Turnstile success callbacks
+window.onLoginTurnstileSuccess = function(token) {
+  console.log('✅ Login Turnstile verified');
+  loginTurnstileToken = token;
+  document.getElementById('login-submit').disabled = false;
+};
+
+window.onRegisterTurnstileSuccess = function(token) {
+  console.log('✅ Register Turnstile verified');
+  registerTurnstileToken = token;
+  document.getElementById('reg-send-btn').disabled = false;
+};
+
+window.onForgotTurnstileSuccess = function(token) {
+  console.log('✅ Forgot Turnstile verified');
+  forgotTurnstileToken = token;
+  document.getElementById('forgot-submit').disabled = false;
+};
 
 // ══════════════════════════════════════════════════════════════
 // MODAL MANAGEMENT
 // ══════════════════════════════════════════════════════════════
 function openModal(id) {
   document.getElementById(id).classList.add('active');
+  
+  // Render Turnstile widget when modal opens
+  setTimeout(() => {
+    if (typeof turnstile !== 'undefined') {
+      if (id === 'modal-login' && !loginWidgetId) {
+        loginWidgetId = renderTurnstileWidget('login-turnstile-container', 'onLoginTurnstileSuccess');
+      } else if (id === 'modal-register' && !registerWidgetId) {
+        registerWidgetId = renderTurnstileWidget('register-turnstile-container', 'onRegisterTurnstileSuccess');
+      } else if (id === 'modal-forgot' && !forgotWidgetId) {
+        forgotWidgetId = renderTurnstileWidget('forgot-turnstile-container', 'onForgotTurnstileSuccess');
+      }
+    }
+  }, 100);
 }
 
 function closeModal(id) {
@@ -720,23 +758,28 @@ function closeModal(id) {
   // Reset Turnstile widgets
   if (typeof turnstile !== 'undefined') {
     try {
-      turnstile.reset();
-    } catch(e) {}
+      if (id === 'modal-login' && loginWidgetId !== null) {
+        turnstile.reset(loginWidgetId);
+        loginTurnstileToken = null;
+        document.getElementById('login-submit').disabled = true;
+      } else if (id === 'modal-register' && registerWidgetId !== null) {
+        turnstile.reset(registerWidgetId);
+        registerTurnstileToken = null;
+        document.getElementById('reg-send-btn').disabled = true;
+      } else if (id === 'modal-forgot' && forgotWidgetId !== null) {
+        turnstile.reset(forgotWidgetId);
+        forgotTurnstileToken = null;
+        document.getElementById('forgot-submit').disabled = true;
+      }
+    } catch(e) {
+      console.error('Turnstile reset error:', e);
+    }
   }
-  
-  // Reset tokens and disable buttons
-  loginTurnstileToken = null;
-  registerTurnstileToken = null;
-  forgotTurnstileToken = null;
-  
-  document.getElementById('login-submit').disabled = true;
-  document.getElementById('reg-send-btn').disabled = true;
-  document.getElementById('forgot-submit').disabled = true;
 }
 
 function switchModal(from, to) {
   closeModal(from);
-  setTimeout(() => openModal(to), 100);
+  setTimeout(() => openModal(to), 150);
 }
 
 function clearMessages() {
@@ -814,19 +857,19 @@ async function sendOtp() {
       switchModal('modal-register', 'modal-verify');
     } else {
       setMsg('reg-msg', d.message || 'Failed to send code', 'error');
-      if (typeof turnstile !== 'undefined') {
-        turnstile.reset();
+      if (typeof turnstile !== 'undefined' && registerWidgetId !== null) {
+        turnstile.reset(registerWidgetId);
+        registerTurnstileToken = null;
+        btn.disabled = true;
       }
-      registerTurnstileToken = null;
-      btn.disabled = true;
     }
   } catch (e) {
     setMsg('reg-msg', 'Network error. Please try again.', 'error');
-    if (typeof turnstile !== 'undefined') {
-      turnstile.reset();
+    if (typeof turnstile !== 'undefined' && registerWidgetId !== null) {
+      turnstile.reset(registerWidgetId);
+      registerTurnstileToken = null;
+      btn.disabled = true;
     }
-    registerTurnstileToken = null;
-    btn.disabled = true;
   }
   
   btn.textContent = 'Send Verification Code';
@@ -920,19 +963,19 @@ async function submitLogin() {
       
     } else {
       setMsg('login-msg', d.message || 'Login failed', 'error');
-      if (typeof turnstile !== 'undefined') {
-        turnstile.reset();
+      if (typeof turnstile !== 'undefined' && loginWidgetId !== null) {
+        turnstile.reset(loginWidgetId);
+        loginTurnstileToken = null;
+        btn.disabled = true;
       }
-      loginTurnstileToken = null;
-      btn.disabled = true;
     }
   } catch (e) {
     setMsg('login-msg', 'Network error. Please try again.', 'error');
-    if (typeof turnstile !== 'undefined') {
-      turnstile.reset();
+    if (typeof turnstile !== 'undefined' && loginWidgetId !== null) {
+      turnstile.reset(loginWidgetId);
+      loginTurnstileToken = null;
+      btn.disabled = true;
     }
-    loginTurnstileToken = null;
-    btn.disabled = true;
   }
 }
 
@@ -963,10 +1006,10 @@ function startLockoutTimer(seconds, message) {
       lockoutInterval = null;
       msgEl.textContent = '';
       msgEl.className = 'modal-msg';
-      if (typeof turnstile !== 'undefined') {
-        turnstile.reset();
+      if (typeof turnstile !== 'undefined' && loginWidgetId !== null) {
+        turnstile.reset(loginWidgetId);
+        loginTurnstileToken = null;
       }
-      loginTurnstileToken = null;
     } else {
       updateDisplay(remaining);
     }
@@ -1032,19 +1075,19 @@ async function submitForgotPassword() {
       switchModal('modal-forgot', 'modal-reset');
     } else {
       setMsg('forgot-msg', d.message || 'Failed to send reset code', 'error');
-      if (typeof turnstile !== 'undefined') {
-        turnstile.reset();
+      if (typeof turnstile !== 'undefined' && forgotWidgetId !== null) {
+        turnstile.reset(forgotWidgetId);
+        forgotTurnstileToken = null;
+        btn.disabled = true;
       }
-      forgotTurnstileToken = null;
-      btn.disabled = true;
     }
   } catch (e) {
     setMsg('forgot-msg', 'Network error. Please try again.', 'error');
-    if (typeof turnstile !== 'undefined') {
-      turnstile.reset();
+    if (typeof turnstile !== 'undefined' && forgotWidgetId !== null) {
+      turnstile.reset(forgotWidgetId);
+      forgotTurnstileToken = null;
+      btn.disabled = true;
     }
-    forgotTurnstileToken = null;
-    btn.disabled = true;
   }
   
   btn.textContent = 'Send Reset Code';
