@@ -233,3 +233,23 @@ ALTER TABLE report_issues
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS phone      VARCHAR(30) DEFAULT NULL UNIQUE AFTER email,
     ADD COLUMN IF NOT EXISTS last_login DATETIME    DEFAULT NULL AFTER is_verified;
+
+
+
+    -- Make queries 10-100x faster
+USE speed_db;
+
+-- Speed up user history lookups
+CREATE INDEX idx_user_created ON speed_results(user_id, created_at DESC);
+
+-- Speed up recent tests queries  
+CREATE INDEX idx_created ON speed_results(created_at DESC);
+
+-- Speed up ISP analytics
+CREATE INDEX idx_isp ON speed_results(isp);
+
+-- Verify report_issues index exists
+SHOW INDEX FROM report_issues WHERE Column_name = 'test_id';
+
+-- Show all indexes to confirm
+SHOW INDEX FROM speed_results;
