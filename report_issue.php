@@ -24,11 +24,10 @@ if (!$body) {
 }
 
 // ── INPUTS ────────────────────────────────────────────────────
-// ── INPUTS ────────────────────────────────────────────────────
 $testId          = isset($body['test_id'])       ? trim($body['test_id'])       : '';
-$issue           = isset($body['description'])   ? trim($body['description'])   : '';  // ← FIXED
+$issue           = isset($body['description'])   ? trim($body['description'])   : '';
 $category        = isset($body['category'])      ? trim($body['category'])      : 'other';
-$reporterContact = isset($body['contact'])       ? trim($body['contact'])       : '';  // ← Also fixed from 'email' to 'contact'
+$reporterContact = isset($body['contact'])       ? trim($body['contact'])       : '';
 $wantsContact    = isset($body['wants_contact']) ? (bool)$body['wants_contact'] : false;
 $dl              = isset($body['dl'])            ? floatval($body['dl'])        : 0;
 $ul              = isset($body['ul'])            ? floatval($body['ul'])        : 0;
@@ -68,18 +67,20 @@ if ($userId) {
         $s->bind_param("i", $userId);
         $s->execute();
         $row = $s->get_result()->fetch_assoc();
-        $s->close(); $c->close();
+        $s->close(); 
+        $c->close();
         if (!empty($row['email'])) $reporterEmail = $row['email'];
         if (!empty($row['phone'])) $reporterPhone = $row['phone'];
     }
 }
 
-$ip = trim(explode(',', (
-    $_SERVER['HTTP_CF_CONNECTING_IP'] ??
-    $_SERVER['HTTP_X_FORWARDED_FOR']  ??
-    $_SERVER['REMOTE_ADDR']           ??
-    'unknown'
-)))[0];
+$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+if (isset($_SERVER['HTTP_CF_CONNECTING_IP'])) {
+    $ip = $_SERVER['HTTP_CF_CONNECTING_IP'];
+} elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+    $ip = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0];
+}
+$ip = trim($ip);
 
 // ── SAVE TO DB ────────────────────────────────────────────────
 $conn = getDBConnection();
@@ -87,6 +88,7 @@ if (!$conn) {
     echo json_encode(['status' => 'error', 'message' => 'Database error']);
     exit;
 }
+
 $stmt = $conn->prepare("
     INSERT INTO report_issues
         (test_id, user_id, reporter_email, reporter_phone, category,
@@ -94,6 +96,7 @@ $stmt = $conn->prepare("
          isp, device, reporter_ip, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
 ");
+
 $wci = $wantsContact ? 1 : 0;
 $stmt->bind_param(
     'siisssiddiiss',
@@ -101,13 +104,17 @@ $stmt->bind_param(
     $category, $issue, $wci,
     $dl, $ul, $ping, $isp, $device, $ip
 );
+
 if (!$stmt->execute()) {
-    $stmt->close(); $conn->close();
+    $stmt->close(); 
+    $conn->close();
     echo json_encode(['status' => 'error', 'message' => 'Failed to save report']);
     exit;
 }
+
 $reportId = $conn->insert_id;
-$stmt->close(); $conn->close();
+$stmt->close(); 
+$conn->close();
 
 // ── LABELS ────────────────────────────────────────────────────
 $categoryLabel = [
@@ -135,7 +142,7 @@ $adminPhone = ADMIN_PHONE;
 // POST https://rest.clicksend.com/v3/sms/send
 // Auth: HTTP Basic — base64(CLICKSEND_USERNAME:CLICKSEND_API_KEY)
 // ══════════════════════════════════════════════════════════════
-function sendClickSendSms(string $to, string $message): bool
+function sendClickSendSms($to, $message)
 {
     $username = CLICKSEND_USERNAME;
     $apiKey   = CLICKSEND_API_KEY;
@@ -145,7 +152,8 @@ function sendClickSendSms(string $to, string $message): bool
         error_log("ClickSend not configured — SMS to {$to} skipped");
         return false;
     }
-    if (!str_starts_with($to, '+')) {
+    
+    if (strpos($to, '+') !== 0) {
         error_log("ClickSend: '{$to}' must be E.164 format e.g. +35796662666");
         return false;
     }
@@ -180,10 +188,12 @@ function sendClickSendSms(string $to, string $message): bool
         error_log("ClickSend cURL error for {$to}: {$curlErr}");
         return false;
     }
+    
     $resp = json_decode($result, true);
     if ($httpCode === 200 && isset($resp['response_code']) && $resp['response_code'] === 'SUCCESS') {
         return true;
     }
+    
     error_log("ClickSend error (HTTP {$httpCode}) for {$to}: " . $result);
     return false;
 }
@@ -207,12 +217,16 @@ sendClickSendSms($adminPhone, $adminSms);
 // 2. ADMIN EMAIL (HTML)
 // ══════════════════════════════════════════════════════════════
 $contactRows = '';
-if ($reporterEmail) $contactRows .= "
+if ($reporterEmail) {
+    $contactRows .= "
   <tr><td style='padding:9px 12px;color:#6b7280;white-space:nowrap'>Reporter Email</td>
       <td style='padding:9px 12px;color:#111'>" . htmlspecialchars($reporterEmail) . "</td></tr>";
-if ($reporterPhone) $contactRows .= "
+}
+if ($reporterPhone) {
+    $contactRows .= "
   <tr style='background:#f9fafb'><td style='padding:9px 12px;color:#6b7280'>Reporter Phone</td>
       <td style='padding:9px 12px;color:#111'>" . htmlspecialchars($reporterPhone) . "</td></tr>";
+}
 
 $adminEmailBody = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'/></head>
 <body style='margin:0;padding:24px;background:#f3f4f6;font-family:Arial,sans-serif'>
