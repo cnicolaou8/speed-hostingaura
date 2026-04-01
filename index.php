@@ -1021,7 +1021,7 @@ async function submitReport() {
     if (d.status === 'success') {
       setMsg('rpt-msg', '✅ Report #' + d.report_id + ' submitted — thank you!', 'success');
       btn.textContent = 'Report Submitted';
-      setTimeout(() => closeModal('modal-report'), 2800);
+      setTimeout(() => closeModal('modal-report'), 10000);
     } else {
       setMsg('rpt-msg', d.message || 'Failed to submit. Please try again.', 'error');
       btn.disabled = false; btn.textContent = 'Submit Report';
