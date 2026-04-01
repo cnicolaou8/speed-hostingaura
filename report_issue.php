@@ -24,10 +24,11 @@ if (!$body) {
 }
 
 // ── INPUTS ────────────────────────────────────────────────────
+// ── INPUTS ────────────────────────────────────────────────────
 $testId          = isset($body['test_id'])       ? trim($body['test_id'])       : '';
-$issue           = isset($body['issue'])         ? trim($body['issue'])         : '';
+$issue           = isset($body['description'])   ? trim($body['description'])   : '';  // ← FIXED
 $category        = isset($body['category'])      ? trim($body['category'])      : 'other';
-$reporterContact = isset($body['email'])         ? trim($body['email'])         : '';
+$reporterContact = isset($body['contact'])       ? trim($body['contact'])       : '';  // ← Also fixed from 'email' to 'contact'
 $wantsContact    = isset($body['wants_contact']) ? (bool)$body['wants_contact'] : false;
 $dl              = isset($body['dl'])            ? floatval($body['dl'])        : 0;
 $ul              = isset($body['ul'])            ? floatval($body['ul'])        : 0;
