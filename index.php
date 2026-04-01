@@ -335,22 +335,25 @@ body{
       <div class="char-hint" id="rpt-char-hint">0 / 1000</div>
     </div>
 
-    <div class="form-group">
-      <label>Your Email or Phone
-        <span class="opt-tag">optional</span>
-      </label>
-      <input type="text" id="rpt-contact"
-        placeholder="you@example.com or +357 99 000000"/>
-    </div>
-
     <div class="cb-row">
-      <input type="checkbox" id="rpt-consent" value="1"/>
+      <input type="checkbox" id="rpt-consent" value="1" onchange="toggleContactRequired()"/>
       <label for="rpt-consent">
         You may contact me if you need more details about this issue
       </label>
     </div>
 
-    <button class="form-submit red" id="rpt-submit" onclick="submitReport()">Submit Report</button>
+    <div class="form-group">
+      <label id="rpt-contact-label">Your Email or Phone
+        <span class="opt-tag" id="rpt-contact-optional">optional</span>
+      </label>
+      <input type="text" id="rpt-contact"
+        placeholder="you@example.com or +357 99 000000"/>
+    </div>
+
+    <!-- TURNSTILE WIDGET -->
+    <div class="turnstile-widget" id="report-turnstile-container"></div>
+
+    <button class="form-submit red" id="rpt-submit" onclick="submitReport()" disabled>Submit Report</button>
     <div class="modal-msg" id="rpt-msg"></div>
   </div>
 </div>
@@ -527,9 +530,12 @@ let forgotType = 'email';
 let loginTurnstileToken    = null;
 let registerTurnstileToken = null;
 let forgotTurnstileToken   = null;
+let reportTurnstileToken   = null;  // ← ADDED FOR REPORT FORM
+
 let loginWidgetId    = null;
 let registerWidgetId = null;
 let forgotWidgetId   = null;
+let reportWidgetId   = null;  // ← ADDED FOR REPORT FORM
 
 let lockoutInterval = null;
 
@@ -642,15 +648,24 @@ window.onLoginTurnstileSuccess = function(token) {
   loginTurnstileToken = token;
   document.getElementById('login-submit').disabled = false;
 };
+
 window.onRegisterTurnstileSuccess = function(token) {
   console.log('✅ Register Turnstile verified');
   registerTurnstileToken = token;
   document.getElementById('reg-send-btn').disabled = false;
 };
+
 window.onForgotTurnstileSuccess = function(token) {
   console.log('✅ Forgot Turnstile verified');
   forgotTurnstileToken = token;
   document.getElementById('forgot-submit').disabled = false;
+};
+
+// ← ADDED TURNSTILE CALLBACK FOR REPORT FORM
+window.onReportTurnstileSuccess = function(token) {
+  console.log('✅ Report Turnstile verified');
+  reportTurnstileToken = token;
+  document.getElementById('rpt-submit').disabled = false;
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -663,6 +678,7 @@ function openModal(id) {
     if (id === 'modal-login'    && !loginWidgetId)    loginWidgetId    = renderTurnstileWidget('login-turnstile-container',    'onLoginTurnstileSuccess');
     if (id === 'modal-register' && !registerWidgetId) registerWidgetId = renderTurnstileWidget('register-turnstile-container', 'onRegisterTurnstileSuccess');
     if (id === 'modal-forgot'   && !forgotWidgetId)   forgotWidgetId   = renderTurnstileWidget('forgot-turnstile-container',   'onForgotTurnstileSuccess');
+    if (id === 'modal-report'   && !reportWidgetId)   reportWidgetId   = renderTurnstileWidget('report-turnstile-container',   'onReportTurnstileSuccess');  // ← ADDED
   }, 100);
 }
 
@@ -674,6 +690,7 @@ function closeModal(id) {
     if (id === 'modal-login'    && loginWidgetId    !== null) { turnstile.reset(loginWidgetId);    loginTurnstileToken    = null; document.getElementById('login-submit').disabled  = true; }
     if (id === 'modal-register' && registerWidgetId !== null) { turnstile.reset(registerWidgetId); registerTurnstileToken = null; document.getElementById('reg-send-btn').disabled  = true; }
     if (id === 'modal-forgot'   && forgotWidgetId   !== null) { turnstile.reset(forgotWidgetId);   forgotTurnstileToken   = null; document.getElementById('forgot-submit').disabled = true; }
+    if (id === 'modal-report'   && reportWidgetId   !== null) { turnstile.reset(reportWidgetId);   reportTurnstileToken   = null; document.getElementById('rpt-submit').disabled   = true; }  // ← ADDED
   } catch(e) { console.error('Turnstile reset error:', e); }
 }
 
@@ -949,6 +966,21 @@ function updateCharHint() {
   el.className   = 'char-hint' + (len >= 1000 ? ' over' : len > 900 ? ' near' : '');
 }
 
+// ← ADDED FUNCTION TO TOGGLE CONTACT FIELD REQUIREMENT
+function toggleContactRequired() {
+  const checkbox = document.getElementById('rpt-consent');
+  const label = document.getElementById('rpt-contact-label');
+  const optTag = document.getElementById('rpt-contact-optional');
+  
+  if (checkbox.checked) {
+    optTag.style.display = 'none';
+    label.innerHTML = 'Your Email or Phone <span style="color:#ff4d4d;margin-left:4px">*</span>';
+  } else {
+    optTag.style.display = 'inline-block';
+    label.innerHTML = 'Your Email or Phone <span class="opt-tag" id="rpt-contact-optional">optional</span>';
+  }
+}
+
 function openReportModal() {
   // Populate snapshot from the live result
   document.getElementById('rpt-snap-id').textContent   = lastResult.testId  || '—';
@@ -967,8 +999,12 @@ function openReportModal() {
   document.getElementById('rpt-consent').checked   = false;
   document.getElementById('rpt-char-hint').textContent = '0 / 1000';
   document.getElementById('rpt-char-hint').className   = 'char-hint';
+  
+  // Reset contact required state
+  toggleContactRequired();
+  
   const submitBtn = document.getElementById('rpt-submit');
-  submitBtn.disabled    = false;
+  submitBtn.disabled    = true;  // ← DISABLED UNTIL TURNSTILE VERIFIES
   submitBtn.textContent = 'Submit Report';
   setMsg('rpt-msg', '', '');
 
@@ -989,6 +1025,13 @@ async function submitReport() {
     setMsg('rpt-msg', 'Description must be 1000 characters or fewer.', 'error');
     return;
   }
+  
+  // ← ADDED VALIDATION: If user wants contact, contact info is mandatory
+  if (consent && !contact) {
+    setMsg('rpt-msg', 'Please provide your email or phone number so we can contact you.', 'error');
+    return;
+  }
+  
   if (contact) {
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
     const isPhone = /^\+?[\d\s\-]{7,20}$/.test(contact);
@@ -996,6 +1039,12 @@ async function submitReport() {
       setMsg('rpt-msg', 'Please enter a valid email or phone number.', 'error');
       return;
     }
+  }
+  
+  // ← ADDED VALIDATION: Turnstile token required
+  if (!reportTurnstileToken) {
+    setMsg('rpt-msg', 'Please complete the security check.', 'error');
+    return;
   }
 
   const btn = document.getElementById('rpt-submit');
@@ -1005,30 +1054,46 @@ async function submitReport() {
     const r = await fetch('report_issue.php', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
-        test_id:       lastResult.testId || '',
-        category:      category,
-        description:   desc,
-        contact:       contact,
-        wants_contact: consent,
-        dl:            lastResult.dl,
-        ul:            lastResult.ul,
-        ping:          lastResult.ping,
-        isp:           document.getElementById('v-isp').textContent || '',
-        device:        detectDevice()
+        test_id:         lastResult.testId || '',
+        category:        category,
+        description:     desc,
+        contact:         contact,
+        wants_contact:   consent,
+        turnstile_token: reportTurnstileToken,  // ← SEND TOKEN
+        dl:              lastResult.dl,
+        ul:              lastResult.ul,
+        ping:            lastResult.ping,
+        isp:             document.getElementById('v-isp').textContent || '',
+        device:          detectDevice()
       })
     });
     const d = await r.json();
+    
     if (d.status === 'success') {
       setMsg('rpt-msg', '✅ Report #' + d.report_id + ' submitted — thank you!', 'success');
       btn.textContent = 'Report Submitted';
-      setTimeout(() => closeModal('modal-report'), 10000);
+      setTimeout(() => closeModal('modal-report'), 6000);  // ← CHANGED TO 6 SECONDS
     } else {
       setMsg('rpt-msg', d.message || 'Failed to submit. Please try again.', 'error');
       btn.disabled = false; btn.textContent = 'Submit Report';
+      
+      // Reset Turnstile on error
+      if (typeof turnstile !== 'undefined' && reportWidgetId !== null) {
+        turnstile.reset(reportWidgetId);
+        reportTurnstileToken = null;
+        btn.disabled = true;
+      }
     }
   } catch(e) {
     setMsg('rpt-msg', 'Network error. Please try again.', 'error');
     btn.disabled = false; btn.textContent = 'Submit Report';
+    
+    // Reset Turnstile on error
+    if (typeof turnstile !== 'undefined' && reportWidgetId !== null) {
+      turnstile.reset(reportWidgetId);
+      reportTurnstileToken = null;
+      btn.disabled = true;
+    }
   }
 }
 

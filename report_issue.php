@@ -4,11 +4,6 @@ require_once 'config.php';
 
 header('Content-Type: application/json');
 
-// Enable error logging
-error_reporting(E_ALL);
-ini_set('log_errors', 1);
-ini_set('error_log', '/var/www/vhosts/hostingaura.com/speed.hostingaura.com/report_debug.log');
-
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     die(json_encode(['status' => 'error', 'message' => 'Method not allowed']));
@@ -17,6 +12,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) {
     die(json_encode(['status' => 'error', 'message' => 'Invalid request']));
+}
+
+// ── VERIFY TURNSTILE ──────────────────────────────────────────
+$turnstileToken = isset($body['turnstile_token']) ? trim($body['turnstile_token']) : '';
+if (!verifyTurnstile($turnstileToken)) {
+    die(json_encode(['status' => 'error', 'message' => 'Security verification failed. Please try again.']));
 }
 
 // ── INPUTS ────────────────────────────────────────────────────
@@ -40,9 +41,34 @@ if (mb_strlen($issue) > 1000) {
     die(json_encode(['status' => 'error', 'message' => 'Description too long']));
 }
 
+// If user wants contact, contact info is mandatory
+if ($wantsContact && empty($reporterContact)) {
+    die(json_encode(['status' => 'error', 'message' => 'Please provide your email or phone number so we can contact you']));
+}
+
 $allowedCategories = ['wrong_speed','test_failed','wrong_location','save_failed','other'];
 if (!in_array($category, $allowedCategories)) {
     $category = 'other';
+}
+
+// ── CHECK FOR DUPLICATE REPORT ────────────────────────────────
+if (!empty($testId)) {
+    $conn = getDBConnection();
+    if ($conn) {
+        $stmt = $conn->prepare("SELECT id FROM report_issues WHERE test_id = ? LIMIT 1");
+        $stmt->bind_param("s", $testId);
+        $stmt->execute();
+        $existing = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        $conn->close();
+        
+        if ($existing) {
+            die(json_encode([
+                'status' => 'error', 
+                'message' => 'A report has already been submitted for this test. You can only submit one report per test.'
+            ]));
+        }
+    }
 }
 
 // ── PARSE CONTACT TYPE ────────────────────────────────────────
@@ -118,8 +144,6 @@ $reportId = $conn->insert_id;
 $stmt->close();
 $conn->close();
 
-error_log("Report #{$reportId} saved successfully");
-
 // ── LABELS ────────────────────────────────────────────────────
 $categoryLabel = [
     'wrong_speed'    => '📉 Speed results seem wrong',
@@ -141,25 +165,13 @@ $siteUrl    = defined('SITE_URL') ? SITE_URL : 'https://speed.hostingaura.com';
 $adminEmail = defined('ADMIN_EMAIL') ? ADMIN_EMAIL : 'c.nicolaou8@proton.me';
 $adminPhone = defined('ADMIN_PHONE') ? ADMIN_PHONE : '+35796662666';
 
-error_log("Config check - Admin Email: {$adminEmail}, Admin Phone: {$adminPhone}");
-
 // ══════════════════════════════════════════════════════════════
 // CLICKSEND SMS FUNCTION
 // ══════════════════════════════════════════════════════════════
 function sendClickSendSms($to, $message)
 {
-    error_log("Attempting to send SMS to: {$to}");
-    
-    if (!defined('CLICKSEND_USERNAME')) {
-        error_log("ERROR: CLICKSEND_USERNAME not defined");
-        return false;
-    }
-    if (!defined('CLICKSEND_API_KEY')) {
-        error_log("ERROR: CLICKSEND_API_KEY not defined");
-        return false;
-    }
-    if (!defined('CLICKSEND_FROM')) {
-        error_log("ERROR: CLICKSEND_FROM not defined");
+    if (!defined('CLICKSEND_USERNAME') || !defined('CLICKSEND_API_KEY') || !defined('CLICKSEND_FROM')) {
+        error_log("ClickSend not configured");
         return false;
     }
     
@@ -167,15 +179,13 @@ function sendClickSendSms($to, $message)
     $apiKey   = CLICKSEND_API_KEY;
     $from     = CLICKSEND_FROM;
 
-    error_log("ClickSend config - Username: {$username}, From: {$from}");
-
     if (empty($username) || empty($apiKey) || empty($from)) {
-        error_log("ERROR: ClickSend credentials are empty");
+        error_log("ClickSend credentials missing");
         return false;
     }
     
     if (strpos($to, '+') !== 0) {
-        error_log("ERROR: Phone must start with + (E.164 format): {$to}");
+        error_log("Phone must start with + (E.164 format): {$to}");
         return false;
     }
 
@@ -187,8 +197,6 @@ function sendClickSendSms($to, $message)
             'from'   => $from,
         ]]
     ]);
-
-    error_log("ClickSend payload: " . $payload);
 
     $ch = curl_init('https://rest.clicksend.com/v3/sms/send');
     curl_setopt_array($ch, [
@@ -207,20 +215,17 @@ function sendClickSendSms($to, $message)
     $curlErr  = curl_error($ch);
     curl_close($ch);
 
-    error_log("ClickSend response - HTTP {$httpCode}: " . $result);
-
     if ($curlErr) {
-        error_log("ERROR: ClickSend cURL error: {$curlErr}");
+        error_log("ClickSend cURL error: {$curlErr}");
         return false;
     }
     
     $resp = json_decode($result, true);
     if ($httpCode === 200 && isset($resp['response_code']) && $resp['response_code'] === 'SUCCESS') {
-        error_log("SUCCESS: SMS sent to {$to}");
         return true;
     }
     
-    error_log("ERROR: ClickSend failed - HTTP {$httpCode}: " . $result);
+    error_log("ClickSend error (HTTP {$httpCode}): " . $result);
     return false;
 }
 
@@ -236,15 +241,11 @@ $adminSms = "HostingAura Report #{$reportId}\n"
   . "Follow-up: " . ($wantsContact ? 'YES' : 'No') . "\n"
   . "Msg: " . mb_substr($issue, 0, 80);
 
-error_log("Sending admin SMS notification");
-$smsResult = sendClickSendSms($adminPhone, $adminSms);
-error_log("Admin SMS result: " . ($smsResult ? 'SUCCESS' : 'FAILED'));
+sendClickSendSms($adminPhone, $adminSms);
 
 // ══════════════════════════════════════════════════════════════
 // 2. ADMIN EMAIL NOTIFICATION
 // ══════════════════════════════════════════════════════════════
-error_log("Sending admin email to: {$adminEmail}");
-
 $contactRows = '';
 if ($reporterEmail) {
     $contactRows .= "<tr><td style='padding:9px 12px;color:#6b7280'>Reporter Email</td>"
@@ -318,8 +319,7 @@ $adminHeaders .= "Content-Type: text/html; charset=UTF-8\r\n";
 $adminHeaders .= "From: HostingAura Reports <noreply@hostingaura.net>\r\n";
 if ($reporterEmail) $adminHeaders .= "Reply-To: {$reporterEmail}\r\n";
 
-$emailResult = mail($adminEmail, "[HostingAura] Issue Report #{$reportId} — {$categoryShort}", $adminEmailBody, $adminHeaders);
-error_log("Admin email result: " . ($emailResult ? 'SUCCESS' : 'FAILED'));
+mail($adminEmail, "[HostingAura] Issue Report #{$reportId} — {$categoryShort}", $adminEmailBody, $adminHeaders);
 
 // ══════════════════════════════════════════════════════════════
 // 3. USER CONFIRMATION (Email preferred, SMS fallback)
@@ -329,8 +329,6 @@ $followUpNote = $wantsContact
     : "No further action is needed from your side.";
 
 if (!empty($reporterEmail)) {
-    error_log("Sending confirmation email to user: {$reporterEmail}");
-    
     $userEmailBody = "<!DOCTYPE html><html><head><meta charset='UTF-8'/></head>
 <body style='margin:0;padding:24px;background:#f3f4f6;font-family:Arial,sans-serif'>
 <div style='max-width:520px;margin:0 auto;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)'>
@@ -363,23 +361,17 @@ if (!empty($reporterEmail)) {
     $userHeaders .= "Content-Type: text/html; charset=UTF-8\r\n";
     $userHeaders .= "From: HostingAura <noreply@hostingaura.net>\r\n";
     
-    $userEmailResult = mail($reporterEmail, "We received your report — HostingAura #{$reportId}", $userEmailBody, $userHeaders);
-    error_log("User email result: " . ($userEmailResult ? 'SUCCESS' : 'FAILED'));
+    mail($reporterEmail, "We received your report — HostingAura #{$reportId}", $userEmailBody, $userHeaders);
 
 } elseif (!empty($reporterPhone)) {
-    error_log("Sending confirmation SMS to user: {$reporterPhone}");
-    
     $userSms = "HostingAura: We received your issue report #{$reportId} and our team is on it! "
              . ($wantsContact ? "We may contact you if we need more info." : "Thank you!");
-    $userSmsResult = sendClickSendSms($reporterPhone, $userSms);
-    error_log("User SMS result: " . ($userSmsResult ? 'SUCCESS' : 'FAILED'));
+    sendClickSendSms($reporterPhone, $userSms);
 }
 
 // ══════════════════════════════════════════════════════════════
 // SUCCESS RESPONSE
 // ══════════════════════════════════════════════════════════════
-error_log("Report #{$reportId} completed - returning success response");
-
 die(json_encode([
     'status'    => 'success',
     'message'   => 'Report submitted',
