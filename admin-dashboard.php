@@ -592,14 +592,14 @@ if (isset($_GET['export'])) {
                 <div class="stat-icon">📱</div>
                 <div class="stat-value"><?= number_format($total_sms) ?></div>
                 <div class="stat-label">SMS Sent</div>
-                <div class="stat-meta">€<?= number_format($total_sms_cost, 2) ?> total cost</div>
+                <div class="stat-meta">€<?= number_format($total_sms_cost, 2) ?> total cost<br><small style="color: #64748b;">Since Apr 2, 2026</small></div>
             </div>
             
             <div class="stat-card">
                 <div class="stat-icon">📧</div>
                 <div class="stat-value"><?= number_format($total_emails) ?></div>
                 <div class="stat-label">Emails Sent</div>
-                <div class="stat-meta">All time total</div>
+                <div class="stat-meta">All time total<br><small style="color: #64748b;">Since Apr 2, 2026</small></div>
             </div>
         </div>
         

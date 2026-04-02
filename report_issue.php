@@ -1,7 +1,7 @@
 <?php
 /**
  * HostingAura - Report Issue Handler
- * Fixed: Turnstile bypass in dev, consistent MySQLi usage
+ * Updated: Added SMS/Email logging to database
  */
 
 session_start();
@@ -20,8 +20,6 @@ if (!$body) {
 }
 
 // ── TURNSTILE VERIFICATION ────────────────────────────────────
-// Only enforce Turnstile if a token was actually sent
-// (allows dashboard modal which may not have the widget rendered)
 $turnstileToken = isset($body['turnstile_token']) ? trim($body['turnstile_token']) : '';
 if (!empty($turnstileToken) && !verifyTurnstile($turnstileToken)) {
     die(json_encode(['status' => 'error', 'message' => 'Security verification failed. Please try again.']));
@@ -163,7 +161,7 @@ $adminPhone = defined('ADMIN_PHONE') ? ADMIN_PHONE : '+35796662666';
 // ══════════════════════════════════════════════════════════════
 // CLICKSEND SMS
 // ══════════════════════════════════════════════════════════════
-function sendClickSendSms($to, $message)
+function sendClickSendSms($to, $message, $conn)
 {
     if (!defined('CLICKSEND_USERNAME') || !defined('CLICKSEND_API_KEY')) return false;
     if (strpos($to, '+') !== 0) {
@@ -190,7 +188,23 @@ function sendClickSendSms($to, $message)
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     $resp = json_decode($result, true);
-    return ($httpCode === 200 && isset($resp['response_code']) && $resp['response_code'] === 'SUCCESS');
+    
+    $success = ($httpCode === 200 && isset($resp['response_code']) && $resp['response_code'] === 'SUCCESS');
+    
+    // ✅ LOG SMS TO DATABASE
+    $sms_status = $success ? 'sent' : 'failed';
+    $sms_cost = 0.05; // Approximate cost per SMS
+    
+    $stmt_log = $conn->prepare("
+        INSERT INTO sms_logs 
+        (recipient_phone, message_text, message_type, status, cost, created_at) 
+        VALUES (?, ?, 'notification', ?, ?, NOW())
+    ");
+    $stmt_log->bind_param("sssd", $to, $message, $sms_status, $sms_cost);
+    $stmt_log->execute();
+    $stmt_log->close();
+    
+    return $success;
 }
 
 // ── ADMIN SMS ─────────────────────────────────────────────────
@@ -203,7 +217,7 @@ $adminSms = "HostingAura Report #{$reportId}\n"
   . "Follow-up: " . ($wantsContact ? 'YES' : 'No') . "\n"
   . "Msg: " . mb_substr($issue, 0, 80);
 
-sendClickSendSms($adminPhone, $adminSms);
+sendClickSendSms($adminPhone, $adminSms, $conn);
 
 // ── ADMIN EMAIL ───────────────────────────────────────────────
 $contactRows = '';
@@ -251,7 +265,21 @@ $adminHeaders .= "Content-Type: text/html; charset=UTF-8\r\n";
 $adminHeaders .= "From: HostingAura Reports <noreply@hostingaura.net>\r\n";
 if ($reporterEmail) $adminHeaders .= "Reply-To: {$reporterEmail}\r\n";
 
-mail($adminEmail, "[HostingAura] Issue Report #{$reportId} — {$categoryShort}", $adminEmailBody, $adminHeaders);
+$admin_email_sent = mail($adminEmail, "[HostingAura] Issue Report #{$reportId} — {$categoryShort}", $adminEmailBody, $adminHeaders);
+
+// ✅ LOG ADMIN EMAIL TO DATABASE
+$admin_email_status = $admin_email_sent ? 'sent' : 'failed';
+$admin_subject = "[HostingAura] Issue Report #{$reportId} — {$categoryShort}";
+$admin_text = "Issue Report #{$reportId}: {$categoryShort} - " . mb_substr($issue, 0, 100);
+
+$stmt_log = $conn->prepare("
+    INSERT INTO email_logs 
+    (recipient_email, subject, message_text, message_html, email_type, status, created_at) 
+    VALUES (?, ?, ?, ?, 'notification', ?, NOW())
+");
+$stmt_log->bind_param("sssss", $adminEmail, $admin_subject, $admin_text, $adminEmailBody, $admin_email_status);
+$stmt_log->execute();
+$stmt_log->close();
 
 // ── USER CONFIRMATION ─────────────────────────────────────────
 $followUpNote = $wantsContact
@@ -289,15 +317,32 @@ if (!empty($reporterEmail)) {
     $userHeaders  = "MIME-Version: 1.0\r\n";
     $userHeaders .= "Content-Type: text/html; charset=UTF-8\r\n";
     $userHeaders .= "From: HostingAura <noreply@hostingaura.net>\r\n";
-    mail($reporterEmail, "We received your report — HostingAura #{$reportId}", $userEmailBody, $userHeaders);
+    
+    $user_email_sent = mail($reporterEmail, "We received your report — HostingAura #{$reportId}", $userEmailBody, $userHeaders);
+    
+    // ✅ LOG USER EMAIL TO DATABASE
+    $user_email_status = $user_email_sent ? 'sent' : 'failed';
+    $user_subject = "We received your report — HostingAura #{$reportId}";
+    $user_text = "Thank you for your report #{$reportId}. We're looking into it.";
+    
+    $stmt_log = $conn->prepare("
+        INSERT INTO email_logs 
+        (recipient_email, subject, message_text, message_html, email_type, user_id, status, created_at) 
+        VALUES (?, ?, ?, ?, 'notification', ?, ?, NOW())
+    ");
+    $stmt_log->bind_param("ssssis", $reporterEmail, $user_subject, $user_text, $userEmailBody, $userId, $user_email_status);
+    $stmt_log->execute();
+    $stmt_log->close();
 
 } elseif (!empty($reporterPhone)) {
     $userSms = "HostingAura: We received your issue report #{$reportId} and our team is on it! "
              . ($wantsContact ? "We may contact you if we need more info." : "Thank you!");
-    sendClickSendSms($reporterPhone, $userSms);
+    sendClickSendSms($reporterPhone, $userSms, $conn);
 }
 
 // ── SUCCESS ───────────────────────────────────────────────────
+$conn->close();
+
 die(json_encode([
     'status'    => 'success',
     'message'   => 'Report submitted successfully',

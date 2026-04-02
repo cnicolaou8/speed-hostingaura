@@ -152,6 +152,19 @@ if ($type === 'sms') {
     $sms_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     
+    // ✅ LOG SMS TO DATABASE
+    $sms_status = ($sms_http_code === 200) ? 'sent' : 'failed';
+    $sms_cost = 0.05; // Approximate cost per SMS
+    
+    $stmt_log = $conn->prepare("
+        INSERT INTO sms_logs 
+        (recipient_phone, message_text, message_type, status, cost, created_at) 
+        VALUES (?, ?, 'otp', ?, ?, NOW())
+    ");
+    $stmt_log->bind_param("sssd", $contact, $smsBody, $sms_status, $sms_cost);
+    $stmt_log->execute();
+    $stmt_log->close();
+    
     if ($sms_http_code !== 200) {
         error_log("ClickSend SMS failed: " . $sms_response);
     }
@@ -188,7 +201,20 @@ if ($type === 'sms') {
     $headers .= "From: " . OTP_FROM_NAME . " <" . OTP_FROM_EMAIL . ">\r\n";
     $headers .= "Reply-To: " . OTP_FROM_EMAIL . "\r\n";
     
-    mail($contact, $subject, $message, $headers);
+    $email_sent = mail($contact, $subject, $message, $headers);
+    
+    // ✅ LOG EMAIL TO DATABASE
+    $email_status = $email_sent ? 'sent' : 'failed';
+    
+    $stmt_log = $conn->prepare("
+        INSERT INTO email_logs 
+        (recipient_email, subject, message_text, message_html, email_type, status, created_at) 
+        VALUES (?, ?, ?, ?, 'otp', ?, NOW())
+    ");
+    $message_text = "Your verification code is: $otp. Valid for " . OTP_EXPIRY_MINUTES . " minutes.";
+    $stmt_log->bind_param("sssss", $contact, $subject, $message_text, $message, $email_status);
+    $stmt_log->execute();
+    $stmt_log->close();
 }
 
 error_log("OTP sent to: $contact (type: $type)");
