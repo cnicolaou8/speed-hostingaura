@@ -295,3 +295,77 @@ CREATE TABLE IF NOT EXISTS app_launch_notifications (
 
 -- Mark all as notified (after sending launch emails):
 -- UPDATE app_launch_notifications SET notified = TRUE, notified_at = NOW() WHERE notified = FALSE;
+
+
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- ADMIN DASHBOARD LOGGING TABLES
+-- Purpose: Track all SMS and emails sent for admin monitoring
+-- ═══════════════════════════════════════════════════════════════
+
+-- SMS Logs Table
+CREATE TABLE IF NOT EXISTS sms_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    recipient_phone VARCHAR(20) NOT NULL,
+    message_text TEXT NOT NULL,
+    message_type ENUM('otp', 'notification', 'other') DEFAULT 'other',
+    user_id INT DEFAULT NULL,
+    status ENUM('sent', 'failed', 'pending') DEFAULT 'pending',
+    clicksend_message_id VARCHAR(100) DEFAULT NULL,
+    error_message TEXT DEFAULT NULL,
+    cost DECIMAL(10,4) DEFAULT NULL,
+    created_at DATETIME NOT NULL,
+    
+    INDEX idx_phone (recipient_phone),
+    INDEX idx_user (user_id),
+    INDEX idx_created (created_at DESC),
+    INDEX idx_type (message_type),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Email Logs Table
+CREATE TABLE IF NOT EXISTS email_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    recipient_email VARCHAR(255) NOT NULL,
+    subject VARCHAR(500) NOT NULL,
+    message_text TEXT NOT NULL,
+    message_html TEXT DEFAULT NULL,
+    email_type ENUM('welcome', 'notification', 'app_launch', 'other') DEFAULT 'other',
+    user_id INT DEFAULT NULL,
+    status ENUM('sent', 'failed', 'pending') DEFAULT 'pending',
+    error_message TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL,
+    
+    INDEX idx_email (recipient_email),
+    INDEX idx_user (user_id),
+    INDEX idx_created (created_at DESC),
+    INDEX idx_type (email_type),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ═══════════════════════════════════════════════════════════════
+-- USAGE INSTRUCTIONS:
+-- ═══════════════════════════════════════════════════════════════
+-- 1. Run this SQL in phpMyAdmin
+-- 2. Database: speed_db
+-- 3. These tables will track all SMS and emails
+-- 4. Update your existing code to log to these tables
+-- ═══════════════════════════════════════════════════════════════
+
+-- Example queries:
+
+-- View recent SMS:
+-- SELECT * FROM sms_logs ORDER BY created_at DESC LIMIT 50;
+
+-- Count total SMS sent:
+-- SELECT COUNT(*) as total FROM sms_logs WHERE status = 'sent';
+
+-- View recent emails:
+-- SELECT * FROM email_logs ORDER BY created_at DESC LIMIT 50;
+
+-- Count emails by type:
+-- SELECT email_type, COUNT(*) as count FROM email_logs GROUP BY email_type;
+
+-- Total cost of SMS sent:
+-- SELECT SUM(cost) as total_cost FROM sms_logs WHERE status = 'sent';
