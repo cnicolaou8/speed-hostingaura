@@ -253,3 +253,45 @@ SHOW INDEX FROM report_issues WHERE Column_name = 'test_id';
 
 -- Show all indexes to confirm
 SHOW INDEX FROM speed_results;
+
+
+-- ═══════════════════════════════════════════════════════════════
+-- DATABASE TABLE: app_launch_notifications
+-- Purpose: Store emails of users who want iOS app launch notifications
+-- ═══════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS app_launch_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    ip_address VARCHAR(45) DEFAULT NULL,
+    user_agent TEXT DEFAULT NULL,
+    notified BOOLEAN DEFAULT FALSE,
+    notified_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL,
+    
+    INDEX idx_email (email),
+    INDEX idx_notified (notified),
+    INDEX idx_created (created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ═══════════════════════════════════════════════════════════════
+-- USAGE INSTRUCTIONS:
+-- ═══════════════════════════════════════════════════════════════
+-- 1. Run this SQL in phpMyAdmin or MySQL command line
+-- 2. Database: speed_db (your existing database)
+-- 3. This creates the table to store notification emails
+-- ═══════════════════════════════════════════════════════════════
+
+-- Example queries:
+
+-- View all notification signups:
+-- SELECT * FROM app_launch_notifications ORDER BY created_at DESC;
+
+-- Count total signups:
+-- SELECT COUNT(*) as total_signups FROM app_launch_notifications;
+
+-- View who hasn't been notified yet:
+-- SELECT * FROM app_launch_notifications WHERE notified = FALSE;
+
+-- Mark all as notified (after sending launch emails):
+-- UPDATE app_launch_notifications SET notified = TRUE, notified_at = NOW() WHERE notified = FALSE;

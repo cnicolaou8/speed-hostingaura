@@ -1,0 +1,336 @@
+<?php
+/**
+ * Send iOS App Launch Notification Emails
+ * File: send-app-launch-emails.php
+ * 
+ * Run this script when your iOS app is approved and live!
+ * It will email everyone who signed up for notifications.
+ * 
+ * IMPORTANT: Update the app store URL before running!
+ */
+
+require_once 'config.php';
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════════════════════════
+
+// UPDATE THIS with your actual App Store URL!
+$app_store_url = 'https://apps.apple.com/app/your-app-id-here';
+
+// Email settings
+$from_email = 'HostingAura <noreply@hostingaura.com>';
+$reply_to = 'support@hostingaura.com';
+
+// ═══════════════════════════════════════════════════════════════
+// SAFETY CHECK - Prevent accidental runs
+// ═══════════════════════════════════════════════════════════════
+
+if (!isset($_GET['confirm']) || $_GET['confirm'] !== 'yes') {
+    ?>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Send Launch Emails - Confirmation Required</title>
+        <style>
+            body { 
+                font-family: -apple-system, sans-serif; 
+                background: #0a0a0f; 
+                color: #e2e8f0;
+                padding: 40px;
+                max-width: 600px;
+                margin: 0 auto;
+            }
+            h1 { color: #6366f1; }
+            .warning {
+                background: rgba(239,68,68,0.1);
+                border: 2px solid #ef4444;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+            }
+            .info {
+                background: rgba(99,102,241,0.1);
+                border: 1px solid #6366f1;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+            }
+            .btn {
+                display: inline-block;
+                padding: 12px 24px;
+                background: linear-gradient(135deg, #6366f1, #8b5cf6);
+                color: white;
+                text-decoration: none;
+                border-radius: 6px;
+                font-weight: 600;
+                margin: 10px 10px 10px 0;
+            }
+            .btn-danger {
+                background: #ef4444;
+            }
+            code {
+                background: #1a1a2e;
+                padding: 2px 6px;
+                border-radius: 4px;
+                color: #6366f1;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🚀 Send iOS App Launch Emails</h1>
+        
+        <div class="warning">
+            <strong>⚠️ WARNING</strong><br>
+            This will send emails to ALL users who signed up for notifications!<br>
+            This action CANNOT be undone.
+        </div>
+        
+        <div class="info">
+            <strong>Before you proceed:</strong><br><br>
+            1. ✅ Your iOS app is LIVE on the App Store<br>
+            2. ✅ You've updated the App Store URL in this script<br>
+            3. ✅ You've tested the email content<br>
+            4. ✅ You're ready to send!
+        </div>
+        
+        <p><strong>Current App Store URL:</strong><br>
+        <code><?= htmlspecialchars($app_store_url) ?></code></p>
+        
+        <?php
+        $db = getDBConnection();
+        $result = $db->query("SELECT COUNT(*) as total FROM app_launch_notifications WHERE notified = FALSE");
+        $pending = $result->fetch_assoc()['total'];
+        ?>
+        
+        <p><strong>Emails to send:</strong> <?= $pending ?></p>
+        
+        <a href="?confirm=yes" class="btn btn-danger">✉️ Yes, Send <?= $pending ?> Emails Now</a>
+        <a href="admin-app-launch-signups.php" class="btn">← Back to Admin</a>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SEND EMAILS
+// ═══════════════════════════════════════════════════════════════
+
+$db = getDBConnection();
+
+// Get all users who haven't been notified
+$stmt = $db->query("SELECT * FROM app_launch_notifications WHERE notified = FALSE");
+$signups = $stmt->fetch_all(MYSQLI_ASSOC);
+
+if (empty($signups)) {
+    echo "<h1>✅ All Done!</h1>";
+    echo "<p>No pending notifications. Everyone has already been notified.</p>";
+    echo '<a href="admin-app-launch-signups.php">← Back to Admin</a>';
+    exit;
+}
+
+$sent_count = 0;
+$failed_count = 0;
+$errors = [];
+
+foreach ($signups as $signup) {
+    $email = $signup['email'];
+    
+    // Email subject
+    $subject = '🎉 HostingAura iOS App is LIVE!';
+    
+    // Email body (HTML)
+    $message = "
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset='UTF-8'>
+    </head>
+    <body style='font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f5; padding: 20px;'>
+        <div style='max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.1);'>
+            <!-- Header -->
+            <div style='background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 40px 20px; text-align: center;'>
+                <h1 style='color: white; margin: 0; font-size: 32px;'>🎉</h1>
+                <h2 style='color: white; margin: 10px 0 0 0;'>It's Finally Here!</h2>
+            </div>
+            
+            <!-- Body -->
+            <div style='padding: 40px 30px;'>
+                <p style='font-size: 16px; line-height: 1.6; color: #333;'>
+                    You asked to be notified when our iOS app launched – and <strong>it's LIVE right now!</strong>
+                </p>
+                
+                <p style='font-size: 16px; line-height: 1.6; color: #333;'>
+                    Download the <strong>HostingAura Speed Test</strong> app and get access to premium features:
+                </p>
+                
+                <ul style='font-size: 16px; line-height: 1.8; color: #333;'>
+                    <li>📱 <strong>Push Notifications</strong> for test reminders</li>
+                    <li>⏰ <strong>Scheduled Tests</strong> that run automatically</li>
+                    <li>🔐 <strong>Face ID / Touch ID</strong> for quick login</li>
+                    <li>⚡ <strong>Native iOS Performance</strong></li>
+                </ul>
+                
+                <!-- Download Button -->
+                <div style='text-align: center; margin: 30px 0;'>
+                    <a href='$app_store_url' style='display: inline-block; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 18px;'>
+                        Download Now
+                    </a>
+                </div>
+                
+                <p style='font-size: 14px; line-height: 1.6; color: #666; text-align: center;'>
+                    Or copy this link: <a href='$app_store_url' style='color: #6366f1;'>$app_store_url</a>
+                </p>
+                
+                <hr style='border: none; border-top: 1px solid #eee; margin: 30px 0;'>
+                
+                <p style='font-size: 14px; line-height: 1.6; color: #666;'>
+                    Thank you for your patience! Be one of the first to leave a review and let us know what you think.
+                </p>
+                
+                <p style='font-size: 14px; line-height: 1.6; color: #666; margin-bottom: 0;'>
+                    <strong>- The HostingAura Team</strong>
+                </p>
+            </div>
+            
+            <!-- Footer -->
+            <div style='background: #f5f5f5; padding: 20px; text-align: center; font-size: 12px; color: #999;'>
+                <p style='margin: 0 0 10px 0;'>
+                    You received this email because you signed up for iOS app launch notifications at speed.hostingaura.com
+                </p>
+                <p style='margin: 0;'>
+                    © " . date('Y') . " HostingAura. All rights reserved.<br>
+                    <a href='https://hostingaura.com' style='color: #6366f1; text-decoration: none;'>hostingaura.com</a>
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    ";
+    
+    // Email headers
+    $headers = [
+        'From: ' . $from_email,
+        'Reply-To: ' . $reply_to,
+        'MIME-Version: 1.0',
+        'Content-Type: text/html; charset=UTF-8'
+    ];
+    
+    // Send email
+    if (mail($email, $subject, $message, implode("\r\n", $headers))) {
+        $sent_count++;
+        
+        // Mark as notified
+        $stmt = $db->prepare("UPDATE app_launch_notifications SET notified = TRUE, notified_at = NOW() WHERE email = ?");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $stmt->close();
+    } else {
+        $failed_count++;
+        $errors[] = $email;
+    }
+    
+    // Small delay to avoid overwhelming mail server
+    usleep(100000); // 0.1 second
+}
+
+$db->close();
+
+// ═══════════════════════════════════════════════════════════════
+// RESULTS
+// ═══════════════════════════════════════════════════════════════
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Launch Emails Sent!</title>
+    <style>
+        body { 
+            font-family: -apple-system, sans-serif; 
+            background: #0a0a0f; 
+            color: #e2e8f0;
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { color: #10b981; }
+        .success {
+            background: rgba(16,185,129,0.1);
+            border: 2px solid #10b981;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .error {
+            background: rgba(239,68,68,0.1);
+            border: 2px solid #ef4444;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat {
+            background: rgba(99,102,241,0.1);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 48px;
+            font-weight: 700;
+            color: #6366f1;
+        }
+        .stat-label {
+            color: #94a3b8;
+            margin-top: 10px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>✅ Launch Emails Sent!</h1>
+    
+    <div class="success">
+        <strong>🎉 Campaign Complete!</strong><br>
+        Your iOS app launch notifications have been sent.
+    </div>
+    
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-value"><?= $sent_count ?></div>
+            <div class="stat-label">Emails Sent</div>
+        </div>
+        
+        <div class="stat">
+            <div class="stat-value"><?= $failed_count ?></div>
+            <div class="stat-label">Failed</div>
+        </div>
+    </div>
+    
+    <?php if (!empty($errors)): ?>
+    <div class="error">
+        <strong>⚠️ Some emails failed to send:</strong><br><br>
+        <?php foreach ($errors as $failed_email): ?>
+            • <?= htmlspecialchars($failed_email) ?><br>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    
+    <a href="admin-app-launch-signups.php" class="btn">← Back to Admin</a>
+</body>
+</html>

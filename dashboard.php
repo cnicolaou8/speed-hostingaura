@@ -1010,7 +1010,7 @@ $stmt->close();
     }
 
     // Notify Me on App Launch (Web only)
-    function notifyMeOnLaunch() {
+    async function notifyMeOnLaunch() {
         const emailInput = document.getElementById('notify-email');
         const email = emailInput.value.trim();
         const successMsg = document.getElementById('notify-success');
@@ -1028,23 +1028,40 @@ $stmt->close();
         btn.disabled = true;
         btn.textContent = 'Saving...';
         
-        // Save to localStorage (and backend)
-        localStorage.setItem('ios_app_launch_notification_email', email);
-        
-        // TODO: Send to backend to save to database
-        // fetch('/api/notify-app-launch', {
-        //     method: 'POST',
-        //     headers: { 'Content-Type': 'application/json' },
-        //     body: JSON.stringify({ email: email })
-        // });
-        
-        // Show success message
-        setTimeout(() => {
-            successMsg.style.display = 'block';
-            emailInput.value = '';
+        try {
+            // Send to backend API
+            const response = await fetch('/api/notify-app-launch.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email: email })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.success) {
+                // Success - save to localStorage too
+                localStorage.setItem('ios_app_launch_notification_email', email);
+                
+                // Show success message
+                successMsg.style.display = 'block';
+                emailInput.value = '';
+                
+                // Optional: Show different message if already registered
+                if (data.already_registered) {
+                    successMsg.textContent = '✅ You\'re already on the list!';
+                }
+            } else {
+                throw new Error(data.error || 'Failed to save email');
+            }
+        } catch (error) {
+            console.error('Notify signup error:', error);
+            alert('Error saving email. Please try again or contact support.');
+        } finally {
             btn.disabled = false;
             btn.textContent = 'Notify Me on Launch';
-        }, 500);
+        }
     }
 
     // Push Notifications (iOS only)
