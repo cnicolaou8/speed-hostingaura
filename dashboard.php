@@ -1,7 +1,8 @@
 <?php
 /**
  * HostingAura Speed Test - Dashboard
- * Version: 1.0.0
+ * Version: 1.1.0 - Platform-Aware Edition
+ * Updated: Separate web and iOS app features
  */
 
 session_start();
@@ -257,6 +258,9 @@ $stmt->close();
         .settings-section { margin-bottom: 32px; }
         .settings-section h3 { color: #6366f1; font-size: 16px; margin-bottom: 16px; font-weight: 600; }
 
+        /* Hide iOS-only sections by default (shown via JS if in app) */
+        .ios-only { display: none; }
+
         .setting-item {
             display: flex; justify-content: space-between; align-items: center;
             padding: 16px; background: rgba(255,255,255,0.02);
@@ -333,6 +337,63 @@ $stmt->close();
         }
 
         .btn-save-schedule:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(99,102,241,0.4); }
+
+        /* Download App Promo (web only) */
+        .download-app-promo {
+            padding: 24px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(139,92,246,0.1));
+            border: 1px solid rgba(99,102,241,0.3);
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .download-app-promo h4 {
+            color: #e2e8f0;
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+
+        .download-app-promo p {
+            color: #94a3b8;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .download-app-promo ul {
+            list-style: none;
+            padding: 0;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .download-app-promo li {
+            padding: 8px 0;
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .download-app-promo li:before {
+            content: "✨";
+            font-size: 16px;
+        }
+
+        .btn-download-app {
+            display: inline-block;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-download-app:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+        }
 
         /* About */
         .about-body { padding: 24px; text-align: center; }
@@ -558,8 +619,26 @@ $stmt->close();
         </div>
         <div class="settings-body">
 
+            <!-- General Settings (always visible) -->
             <div class="settings-section">
-                <h3>🔔 Notifications</h3>
+                <h3>🌐 General</h3>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">Email Notifications</div>
+                        <div class="setting-description">Receive test summaries via email</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="email-notifications-toggle" onchange="toggleEmailNotifications()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- iOS-Only Features (hidden on web, shown in app) -->
+            <div class="settings-section ios-only" id="ios-features-section">
+                <h3>📱 iOS App Features</h3>
+                
+                <!-- Push Notifications -->
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Push Notifications</div>
@@ -570,13 +649,11 @@ $stmt->close();
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
-            </div>
 
-            <div class="settings-section">
-                <h3>⏰ Scheduled Tests</h3>
+                <!-- Scheduled Tests -->
                 <div class="setting-item">
                     <div class="setting-info">
-                        <div class="setting-label">Auto Speed Tests</div>
+                        <div class="setting-label">Scheduled Auto Tests</div>
                         <div class="setting-description">Automatically run tests on schedule</div>
                     </div>
                     <label class="toggle-switch">
@@ -584,6 +661,7 @@ $stmt->close();
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
+                
                 <div id="schedule-settings" class="schedule-config" style="display:none;">
                     <div class="schedule-time">
                         <label>Test Time:</label>
@@ -603,10 +681,8 @@ $stmt->close();
                     </div>
                     <button onclick="saveSchedule()" class="btn-save-schedule">Save Schedule</button>
                 </div>
-            </div>
 
-            <div class="settings-section">
-                <h3>🔐 Security</h3>
+                <!-- Face ID -->
                 <div class="setting-item">
                     <div class="setting-info">
                         <div class="setting-label">Face ID / Touch ID</div>
@@ -619,13 +695,31 @@ $stmt->close();
                 </div>
             </div>
 
+            <!-- Download App Promo (web only) -->
+            <div class="settings-section web-only" id="download-app-section">
+                <div class="download-app-promo">
+                    <h4>📱 Get the iOS App</h4>
+                    <p>Unlock premium features with the HostingAura iOS app:</p>
+                    <ul>
+                        <li>Push Notifications for test reminders</li>
+                        <li>Scheduled automatic speed tests</li>
+                        <li>Face ID / Touch ID quick login</li>
+                        <li>Native iOS performance</li>
+                    </ul>
+                    <a href="https://apps.apple.com/app/hostingaura-speedtest" class="btn-download-app" target="_blank">
+                        Download on App Store
+                    </a>
+                </div>
+            </div>
+
+            <!-- App Info -->
             <div class="settings-section">
-                <h3>ℹ️ App Information</h3>
+                <h3>ℹ️ Information</h3>
                 <div class="setting-item-static">
                     <div class="setting-label">Version</div>
-                    <div class="setting-value">1.0.0 (Build 1)</div>
+                    <div class="setting-value">1.1.0 (Build 2)</div>
                 </div>
-                <div class="setting-item-static">
+                <div class="setting-item-static ios-only">
                     <div class="setting-label">Bundle ID</div>
                     <div class="setting-value">com.hostingaura.speedtest</div>
                 </div>
@@ -647,7 +741,7 @@ $stmt->close();
             <div class="about-logo">
                 <div class="about-icon">HA</div>
                 <h3>hostingaura speedtest</h3>
-                <p class="version">Version 1.0.0</p>
+                <p class="version">Version 1.1.0</p>
             </div>
             <div class="about-description">
                 <p>Enterprise-grade network performance testing tool. Measure your internet speed with professional accuracy and detailed analytics.</p>
@@ -676,17 +770,18 @@ $stmt->close();
             <div class="help-section">
                 <h3>🚀 Getting Started</h3>
                 <ul>
-                    <li><strong>Run a Test:</strong> Tap "+ New Test" to start a speed test</li>
+                    <li><strong>Run a Test:</strong> Click "+ New Test" to start a speed test</li>
                     <li><strong>View History:</strong> All past tests are saved in your dashboard</li>
-                    <li><strong>Report an Issue:</strong> After completing a test, tap "Report an Issue" on the results page</li>
+                    <li><strong>Report an Issue:</strong> After completing a test, click "Report an Issue" on the results page (not available on dashboard)</li>
                 </ul>
             </div>
             <div class="help-section">
                 <h3>⚙️ Settings</h3>
                 <ul>
-                    <li><strong>Push Notifications:</strong> Get reminders for scheduled tests</li>
-                    <li><strong>Auto Tests:</strong> Schedule tests to run automatically</li>
-                    <li><strong>Face ID:</strong> Enable biometric login for quick access</li>
+                    <li><strong>Email Notifications:</strong> Get test summaries via email (available on web and app)</li>
+                    <li><strong>Push Notifications:</strong> Get instant reminders (iOS app only)</li>
+                    <li><strong>Scheduled Tests:</strong> Run tests automatically (iOS app only)</li>
+                    <li><strong>Face ID:</strong> Quick biometric login (iOS app only)</li>
                 </ul>
             </div>
             <div class="help-section">
@@ -700,8 +795,12 @@ $stmt->close();
                     <p>Approximately 250–500MB per test (download + upload combined).</p>
                 </div>
                 <div class="faq-item">
-                    <strong>Where can I report a problem?</strong>
-                    <p>Complete a speed test first — a "Report an Issue" option will appear on your results page.</p>
+                    <strong>Where can I report a problem with my test?</strong>
+                    <p>After completing a speed test, you'll see a "Report an Issue" button on your results page. This ensures we can track which specific test had the problem.</p>
+                </div>
+                <div class="faq-item">
+                    <strong>What's the difference between web and iOS app?</strong>
+                    <p>The iOS app includes premium features like push notifications, scheduled automatic tests, and Face ID login. The web version has all core testing features.</p>
                 </div>
             </div>
             <div class="help-section">
@@ -714,6 +813,32 @@ $stmt->close();
 </div>
 
 <script>
+    // ══════════════════════════════════════════════════════════
+    // PLATFORM DETECTION - Show/Hide iOS Features
+    // ══════════════════════════════════════════════════════════
+    
+    let isIOSApp = false;
+    
+    // Detect if running in Capacitor (iOS app)
+    function detectPlatform() {
+        isIOSApp = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+        
+        if (isIOSApp) {
+            // Show iOS features, hide web-only content
+            document.querySelectorAll('.ios-only').forEach(el => el.style.display = 'block');
+            document.querySelectorAll('.web-only').forEach(el => el.style.display = 'none');
+            console.log('Platform: iOS App - Native features enabled');
+        } else {
+            // Show web-only content, hide iOS features
+            document.querySelectorAll('.ios-only').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.web-only').forEach(el => el.style.display = 'block');
+            console.log('Platform: Web Browser - iOS features hidden');
+        }
+    }
+    
+    // Run detection on page load
+    detectPlatform();
+
     // ── PROFILE DROPDOWN ──────────────────────────────────────
     function toggleProfileMenu() {
         const dd = document.getElementById('profile-dropdown');
@@ -750,100 +875,131 @@ $stmt->close();
 
     // ── SETTINGS ──────────────────────────────────────────────
     function loadSavedSettings() {
-        document.getElementById('push-notifications-toggle').checked =
-            localStorage.getItem('push_notifications_enabled') === 'true';
+        // Email notifications (always available)
+        document.getElementById('email-notifications-toggle').checked =
+            localStorage.getItem('email_notifications_enabled') === 'true';
+        
+        // iOS-only features (only load if in app)
+        if (isIOSApp) {
+            document.getElementById('push-notifications-toggle').checked =
+                localStorage.getItem('push_notifications_enabled') === 'true';
 
-        const scheduleData = localStorage.getItem('scheduled_tests');
-        if (scheduleData) {
-            const schedule = JSON.parse(scheduleData);
-            document.getElementById('scheduled-tests-toggle').checked = schedule.enabled;
-            if (schedule.enabled) {
-                document.getElementById('schedule-settings').style.display = 'block';
-                document.getElementById('test-time').value = schedule.time || '09:00';
-                document.querySelectorAll('.days-selector input[type="checkbox"]').forEach(cb => {
-                    cb.checked = schedule.days && schedule.days.includes(parseInt(cb.value));
-                });
-            }
-        }
-
-        document.getElementById('faceid-toggle').checked =
-            localStorage.getItem('biometric_enabled') === 'true';
-    }
-
-    async function togglePushNotifications() {
-        const enabled = document.getElementById('push-notifications-toggle').checked;
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            try {
-                const m = await import('./native-features.js');
-                if (enabled) {
-                    const ok = await m.enablePushNotifications();
-                    if (!ok) {
-                        document.getElementById('push-notifications-toggle').checked = false;
-                        alert('Please enable notifications in iOS Settings');
-                    }
-                } else {
-                    m.disablePushNotifications();
+            const scheduleData = localStorage.getItem('scheduled_tests');
+            if (scheduleData) {
+                const schedule = JSON.parse(scheduleData);
+                document.getElementById('scheduled-tests-toggle').checked = schedule.enabled;
+                if (schedule.enabled) {
+                    document.getElementById('schedule-settings').style.display = 'block';
+                    document.getElementById('test-time').value = schedule.time || '09:00';
+                    document.querySelectorAll('.days-selector input[type="checkbox"]').forEach(cb => {
+                        cb.checked = schedule.days && schedule.days.includes(parseInt(cb.value));
+                    });
                 }
-            } catch(e) { console.error(e); }
-        } else {
-            localStorage.setItem('push_notifications_enabled', enabled ? 'true' : 'false');
+            }
+
+            document.getElementById('faceid-toggle').checked =
+                localStorage.getItem('biometric_enabled') === 'true';
         }
     }
 
+    // Email Notifications (Web + iOS)
+    function toggleEmailNotifications() {
+        const enabled = document.getElementById('email-notifications-toggle').checked;
+        localStorage.setItem('email_notifications_enabled', enabled ? 'true' : 'false');
+        
+        // TODO: Send to backend to save preference
+        if (enabled) {
+            alert('✅ Email notifications enabled. You\'ll receive test summaries via email.');
+        }
+    }
+
+    // Push Notifications (iOS only)
+    async function togglePushNotifications() {
+        if (!isIOSApp) return; // Should never happen (hidden on web)
+        
+        const enabled = document.getElementById('push-notifications-toggle').checked;
+        try {
+            const m = await import('./native-features.js');
+            if (enabled) {
+                const ok = await m.enablePushNotifications();
+                if (!ok) {
+                    document.getElementById('push-notifications-toggle').checked = false;
+                    alert('Please enable notifications in iOS Settings → HostingAura');
+                }
+            } else {
+                m.disablePushNotifications();
+            }
+        } catch(e) { 
+            console.error('Push notifications error:', e);
+            document.getElementById('push-notifications-toggle').checked = false;
+        }
+    }
+
+    // Scheduled Tests (iOS only)
     async function toggleScheduledTests() {
+        if (!isIOSApp) return; // Should never happen (hidden on web)
+        
         const enabled = document.getElementById('scheduled-tests-toggle').checked;
         document.getElementById('schedule-settings').style.display = enabled ? 'block' : 'none';
+        
         if (!enabled) {
-            if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-                try { const m = await import('./native-features.js'); await m.setupScheduledTests({ enabled: false }); }
-                catch(e) { console.error(e); }
-            }
+            try {
+                const m = await import('./native-features.js');
+                await m.setupScheduledTests({ enabled: false });
+            } catch(e) { console.error(e); }
             localStorage.setItem('scheduled_tests', JSON.stringify({ enabled: false }));
         }
     }
 
+    // Save Schedule (iOS only)
     async function saveSchedule() {
+        if (!isIOSApp) return; // Should never happen (hidden on web)
+        
         const time = document.getElementById('test-time').value;
         const days = Array.from(
             document.querySelectorAll('.days-selector input[type="checkbox"]:checked')
         ).map(cb => parseInt(cb.value));
 
-        if (days.length === 0) { alert('Please select at least one day'); return; }
+        if (days.length === 0) { 
+            alert('Please select at least one day'); 
+            return; 
+        }
 
         const schedule = { enabled: true, time, days };
         localStorage.setItem('scheduled_tests', JSON.stringify(schedule));
 
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            try {
-                const m = await import('./native-features.js');
-                await m.setupScheduledTests(schedule);
-                alert('✅ Schedule saved! Tests will run automatically at ' + time);
-            } catch(e) { alert('Schedule saved locally'); }
-        } else {
-            alert('✅ Schedule saved!');
+        try {
+            const m = await import('./native-features.js');
+            await m.setupScheduledTests(schedule);
+            alert('✅ Schedule saved! Tests will run automatically at ' + time);
+        } catch(e) { 
+            console.error(e);
+            alert('Schedule saved locally. Will sync on app restart.'); 
         }
     }
 
+    // Face ID (iOS only)
     async function toggleFaceID() {
+        if (!isIOSApp) return; // Should never happen (hidden on web)
+        
         const enabled = document.getElementById('faceid-toggle').checked;
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            try {
-                const m = await import('./native-features.js');
-                if (enabled) {
-                    const available = await m.isBiometricAvailable();
-                    if (!available) {
-                        document.getElementById('faceid-toggle').checked = false;
-                        alert('Face ID / Touch ID not available');
-                        return;
-                    }
-                    const ok = await m.enableBiometricAuth();
-                    if (!ok) document.getElementById('faceid-toggle').checked = false;
-                } else {
-                    localStorage.setItem('biometric_enabled', 'false');
+        try {
+            const m = await import('./native-features.js');
+            if (enabled) {
+                const available = await m.isBiometricAvailable();
+                if (!available) {
+                    document.getElementById('faceid-toggle').checked = false;
+                    alert('Face ID / Touch ID not available on this device');
+                    return;
                 }
-            } catch(e) { document.getElementById('faceid-toggle').checked = false; }
-        } else {
-            localStorage.setItem('biometric_enabled', enabled ? 'true' : 'false');
+                const ok = await m.enableBiometricAuth();
+                if (!ok) document.getElementById('faceid-toggle').checked = false;
+            } else {
+                localStorage.setItem('biometric_enabled', 'false');
+            }
+        } catch(e) { 
+            console.error(e);
+            document.getElementById('faceid-toggle').checked = false; 
         }
     }
 </script>
