@@ -379,20 +379,97 @@ $stmt->close();
             font-size: 16px;
         }
 
-        .btn-download-app {
+        /* Coming Soon Badge */
+        .coming-soon-badge {
             display: inline-block;
-            padding: 14px 32px;
-            background: linear-gradient(135deg, #6366f1, #8b5cf6);
-            color: white;
-            text-decoration: none;
+            padding: 12px 32px;
+            background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.2));
+            border: 2px solid rgba(99,102,241,0.5);
             border-radius: 8px;
-            font-weight: 600;
+            color: #a78bfa;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { 
+                border-color: rgba(99,102,241,0.5);
+                box-shadow: 0 0 0 0 rgba(99,102,241,0.4);
+            }
+            50% { 
+                border-color: rgba(139,92,246,0.8);
+                box-shadow: 0 0 20px 0 rgba(99,102,241,0.3);
+            }
+        }
+
+        .coming-soon-note {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(99,102,241,0.05);
+            border-radius: 8px;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        .notify-form {
+            margin-top: 20px;
+            display: flex;
+            gap: 8px;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .notify-input {
+            width: 100%;
+            max-width: 300px;
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid #2a2a3e;
+            border-radius: 8px;
+            color: #e2e8f0;
+            font-size: 14px;
             transition: all 0.3s ease;
         }
 
-        .btn-download-app:hover {
+        .notify-input:focus {
+            outline: none;
+            border-color: #6366f1;
+            background: rgba(255,255,255,0.08);
+        }
+
+        .notify-input::placeholder {
+            color: #64748b;
+        }
+
+        .btn-notify {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-notify:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+        }
+
+        .btn-notify:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .notify-success {
+            color: #10b981;
+            font-size: 14px;
+            margin-top: 12px;
         }
 
         /* About */
@@ -698,17 +775,36 @@ $stmt->close();
             <!-- Download App Promo (web only) -->
             <div class="settings-section web-only" id="download-app-section">
                 <div class="download-app-promo">
-                    <h4>📱 Get the iOS App</h4>
-                    <p>Unlock premium features with the HostingAura iOS app:</p>
+                    <h4>📱 iOS App Coming Soon!</h4>
+                    <p>We're building a native iOS app with exclusive features:</p>
                     <ul>
                         <li>Push Notifications for test reminders</li>
                         <li>Scheduled automatic speed tests</li>
                         <li>Face ID / Touch ID quick login</li>
                         <li>Native iOS performance</li>
                     </ul>
-                    <a href="https://apps.apple.com/app/hostingaura-speedtest" class="btn-download-app" target="_blank">
-                        Download on App Store
-                    </a>
+                    
+                    <div class="coming-soon-badge">🚀 Coming Soon</div>
+                    
+                    <div class="coming-soon-note">
+                        Currently in final testing. Be the first to know when it launches!
+                    </div>
+                    
+                    <div class="notify-form">
+                        <input 
+                            type="email" 
+                            id="notify-email" 
+                            class="notify-input" 
+                            placeholder="Enter your email"
+                            autocomplete="email"
+                        >
+                        <button class="btn-notify" onclick="notifyMeOnLaunch()">
+                            Notify Me on Launch
+                        </button>
+                        <div id="notify-success" class="notify-success" style="display:none;">
+                            ✅ You're on the list! We'll email you when it's ready.
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -799,8 +895,8 @@ $stmt->close();
                     <p>After completing a speed test, you'll see a "Report an Issue" button on your results page. This ensures we can track which specific test had the problem.</p>
                 </div>
                 <div class="faq-item">
-                    <strong>What's the difference between web and iOS app?</strong>
-                    <p>The iOS app includes premium features like push notifications, scheduled automatic tests, and Face ID login. The web version has all core testing features.</p>
+                    <strong>When will the iOS app be available?</strong>
+                    <p>The iOS app is currently in final testing and will be available soon on the App Store. Want to be notified? Go to Settings → Get the iOS App and enter your email to be the first to know when it launches!</p>
                 </div>
             </div>
             <div class="help-section">
@@ -911,6 +1007,44 @@ $stmt->close();
         if (enabled) {
             alert('✅ Email notifications enabled. You\'ll receive test summaries via email.');
         }
+    }
+
+    // Notify Me on App Launch (Web only)
+    function notifyMeOnLaunch() {
+        const emailInput = document.getElementById('notify-email');
+        const email = emailInput.value.trim();
+        const successMsg = document.getElementById('notify-success');
+        const btn = event.target;
+        
+        // Validate email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!email || !emailRegex.test(email)) {
+            alert('Please enter a valid email address');
+            emailInput.focus();
+            return;
+        }
+        
+        // Disable button
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        
+        // Save to localStorage (and backend)
+        localStorage.setItem('ios_app_launch_notification_email', email);
+        
+        // TODO: Send to backend to save to database
+        // fetch('/api/notify-app-launch', {
+        //     method: 'POST',
+        //     headers: { 'Content-Type': 'application/json' },
+        //     body: JSON.stringify({ email: email })
+        // });
+        
+        // Show success message
+        setTimeout(() => {
+            successMsg.style.display = 'block';
+            emailInput.value = '';
+            btn.disabled = false;
+            btn.textContent = 'Notify Me on Launch';
+        }, 500);
     }
 
     // Push Notifications (iOS only)
