@@ -21,10 +21,25 @@ $admin_password = ''; // ⚠️ CHANGE THIS PASSWORD!
 $totp_secret = ''; // ⚠️ CHANGE THIS SECRET!
 
 /**
- * Generate a new TOTP secret (Base32, 16+ characters):
- * Visit: https://www.random.org/strings/?num=1&len=20&digits=on&upperalpha=on&unique=on&format=plain
- * Use only: A-Z and 2-7 (Base32 alphabet)
- * Example: KBZG6Y3FMRQW2YJPNRXS
+ * CRITICAL: Generate a new TOTP secret (Base32 format)
+ * 
+ * IMPORTANT RULES:
+ * - Use ONLY these characters: A-Z (uppercase) and 2-7
+ * - Length: 16-20 characters recommended
+ * - NO lowercase, NO 0, 1, 8, 9, NO special characters
+ * 
+ * Generate new secret:
+ * Method 1: https://www.random.org/strings/?num=1&len=16&upperalpha=on&unique=on&format=plain
+ *           Then manually replace any letters after Z with numbers 2-7
+ * 
+ * Method 2: Use this valid example format:
+ *           KBZG6Y3FMRQW2LKN (only A-Z and 2-7)
+ * 
+ * Valid characters: ABCDEFGHIJKLMNOPQRSTUVWXYZ234567
+ * Example valid secrets:
+ * - JBSWY3DPEHPK3PXP
+ * - KBZGCY3FMRQW2LKN  
+ * - MFRGGZDFMZTWQ2LK
  */
 
 // ═══════════════════════════════════════════════════════════════
@@ -88,7 +103,7 @@ function get_totp_token($secret, $timeSlice = null) {
     return str_pad($value % $modulo, 6, '0', STR_PAD_LEFT);
 }
 
-function verify_totp($secret, $code, $discrepancy = 1) {
+function verify_totp($secret, $code, $discrepancy = 2) {
     $currentTimeSlice = floor(time() / 30);
     
     for ($i = -$discrepancy; $i <= $discrepancy; $i++) {
@@ -280,7 +295,9 @@ if (!isset($_SESSION['admin_2fa_verified'])) {
     // Generate QR code URL for authenticator apps
     $app_name = 'HostingAura Admin';
     $qr_code_url = 'otpauth://totp/' . urlencode($app_name) . '?secret=' . $totp_secret . '&issuer=' . urlencode('HostingAura');
-    $qr_image_url = 'https://chart.googleapis.com/chart?chs=250x250&cht=qr&chl=' . urlencode($qr_code_url) . '&choe=UTF-8';
+    
+    // Use QR Server API instead of Google Charts (more reliable)
+    $qr_image_url = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' . urlencode($qr_code_url);
     
     ?>
     <!DOCTYPE html>
@@ -519,11 +536,12 @@ if (!isset($_SESSION['admin_2fa_verified'])) {
                 
                 <div class="instructions">
                     <strong>3. Or enter this secret key manually:</strong>
+                    <br><small style="color: #64748b; font-size: 12px;">Only use: A-Z and 2-7 (no spaces)</small>
                 </div>
-                <div class="secret-code" onclick="copySecret()" title="Click to copy">
-                    <?= chunk_split($totp_secret, 4, ' ') ?>
+                <div class="secret-code" onclick="copySecret()" title="Click to copy (without spaces)">
+                    <?= $totp_secret ?>
                 </div>
-                <div class="copy-hint">👆 Click to copy</div>
+                <div class="copy-hint">👆 Click to copy (automatically removes spaces)</div>
             </div>
             <?php else: ?>
             <div class="prompt-text">
@@ -557,11 +575,20 @@ if (!isset($_SESSION['admin_2fa_verified'])) {
         
         <script>
             function copySecret() {
-                const secret = '<?= $totp_secret ?>';
+                // Remove any spaces and ensure uppercase
+                const secret = '<?= $totp_secret ?>'.replace(/\s/g, '').toUpperCase();
+                
+                // Validate Base32 format (A-Z and 2-7 only)
+                const validChars = /^[A-Z2-7]+$/;
+                if (!validChars.test(secret)) {
+                    alert('⚠️ Secret key contains invalid characters! Use only A-Z and 2-7.');
+                    return;
+                }
+                
                 navigator.clipboard.writeText(secret).then(() => {
-                    alert('✓ Secret key copied to clipboard!');
+                    alert('✓ Secret key copied to clipboard!\n\n' + secret);
                 }).catch(() => {
-                    prompt('Copy this secret key:', secret);
+                    prompt('Copy this secret key (A-Z and 2-7 only):', secret);
                 });
             }
             
@@ -599,6 +626,9 @@ $db = getDBConnection();
 
 // Get view parameter
 $view = $_GET['view'] ?? 'overview';
+
+// Get filter parameter (for filtering by user)
+$filter_user_id = isset($_GET['user_id']) ? (int)$_GET['user_id'] : null;
 
 // ── OVERVIEW STATS ─────────────────────────────────────────────
 
@@ -673,10 +703,17 @@ if ($view === 'emails') {
 
 // Speed tests data
 if ($view === 'tests') {
+    $where_clause = $filter_user_id ? "WHERE sr.user_id = $filter_user_id" : "";
+    
     $tests_query = $db->query("
-        SELECT sr.*, u.email as user_email
+        SELECT 
+            sr.*,
+            u.email as user_email,
+            u.phone as user_phone,
+            u.id as linked_user_id
         FROM speed_results sr
         LEFT JOIN users u ON sr.user_id = u.id
+        $where_clause
         ORDER BY sr.created_at DESC
         LIMIT $limit
     ");
@@ -1146,9 +1183,17 @@ if (isset($_GET['export'])) {
                         <?php foreach ($users_data as $user): ?>
                         <tr>
                             <td><?= $user['id'] ?></td>
-                            <td><?= htmlspecialchars($user['email'] ?? $user['phone'] ?? 'N/A') ?></td>
+                            <td>
+                                <a href="?view=tests&user_id=<?= $user['id'] ?>" style="color: #6366f1; text-decoration: none;">
+                                    <?= htmlspecialchars($user['email'] ?? $user['phone'] ?? 'N/A') ?>
+                                </a>
+                            </td>
                             <td><?= htmlspecialchars($user['phone'] ?? '-') ?></td>
-                            <td><?= $user['test_count'] ?></td>
+                            <td>
+                                <a href="?view=tests&user_id=<?= $user['id'] ?>" style="color: #6366f1; text-decoration: none;">
+                                    <?= $user['test_count'] ?> tests
+                                </a>
+                            </td>
                             <td><?= date('M d, Y H:i', strtotime($user['created_at'])) ?></td>
                         </tr>
                         <?php endforeach; ?>
@@ -1158,8 +1203,20 @@ if (isset($_GET['export'])) {
             <?php elseif ($view === 'tests'): ?>
                 <!-- Speed Tests Table -->
                 <div class="section-header">
-                    <h2 class="section-title">🚀 Speed Test Results</h2>
-                    <a href="?view=tests&export=tests" class="btn btn-secondary">📥 Export CSV</a>
+                    <h2 class="section-title">
+                        🚀 Speed Test Results
+                        <?php if ($filter_user_id): ?>
+                            <?php 
+                            $filter_user = $db->query("SELECT email, phone FROM users WHERE id = $filter_user_id")->fetch_assoc();
+                            $filter_display = $filter_user['email'] ?: $filter_user['phone'] ?: "User #$filter_user_id";
+                            ?>
+                            <span style="color: #6366f1; font-size: 16px;"> 
+                                — Filtered by: <?= htmlspecialchars($filter_display) ?>
+                                <a href="?view=tests" style="color: #ef4444; text-decoration: none; margin-left: 10px;">✕ Clear</a>
+                            </span>
+                        <?php endif; ?>
+                    </h2>
+                    <a href="?view=tests<?= $filter_user_id ? '&user_id=' . $filter_user_id : '' ?>&export=tests" class="btn btn-secondary">📥 Export CSV</a>
                 </div>
                 
                 <table class="data-table">
@@ -1178,7 +1235,24 @@ if (isset($_GET['export'])) {
                         <?php foreach ($tests_data as $test): ?>
                         <tr>
                             <td><?= $test['id'] ?></td>
-                            <td><?= htmlspecialchars($test['user_email'] ?? 'Guest') ?></td>
+                            <td>
+                                <?php 
+                                $user_display = 'Guest';
+                                $user_link = '';
+                                if (!empty($test['linked_user_id'])) {
+                                    // Show email if exists, otherwise phone, otherwise user ID
+                                    $user_display = $test['user_email'] ?: ($test['user_phone'] ?: 'User #' . $test['linked_user_id']);
+                                    $user_link = '?view=tests&user_id=' . $test['linked_user_id'];
+                                }
+                                ?>
+                                <?php if ($user_link): ?>
+                                    <a href="<?= $user_link ?>" style="color: #6366f1; text-decoration: none; hover: text-decoration: underline;">
+                                        <?= htmlspecialchars($user_display) ?>
+                                    </a>
+                                <?php else: ?>
+                                    <?= htmlspecialchars($user_display) ?>
+                                <?php endif; ?>
+                            </td>
                             <td><?= number_format($test['download_speed'], 2) ?> Mbps</td>
                             <td><?= number_format($test['upload_speed'], 2) ?> Mbps</td>
                             <td><?= $test['ping'] ?> ms</td>
