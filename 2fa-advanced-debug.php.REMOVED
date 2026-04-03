@@ -1,0 +1,529 @@
+<?php
+/**
+ * ADVANCED 2FA Diagnostic Tool
+ * Shows EXACT secret, validates Base32, tests TOTP step-by-step
+ */
+
+session_start();
+require_once 'config.php';
+
+// ═══════════════════════════════════════════════════════════════
+// YOUR SECRET - COPY FROM admin-dashboard-2FA.php LINE 18
+// ═══════════════════════════════════════════════════════════════
+$totp_secret = ''; // ⚠️ CHANGE THIS!
+
+// ═══════════════════════════════════════════════════════════════
+// VALIDATE SECRET
+// ═══════════════════════════════════════════════════════════════
+
+$secret_clean = strtoupper(trim($totp_secret));
+$secret_length = strlen($secret_clean);
+$secret_bytes = str_split($secret_clean);
+
+// Check for valid Base32 characters
+$valid_chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+$invalid_chars = [];
+foreach ($secret_bytes as $char) {
+    if (strpos($valid_chars, $char) === false) {
+        $invalid_chars[] = $char;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOTP REFERENCE IMPLEMENTATION (Known Working)
+// ═══════════════════════════════════════════════════════════════
+
+function base32_decode($secret) {
+    if (empty($secret)) return '';
+    
+    $base32chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    $base32charsFlipped = array_flip(str_split($base32chars));
+    
+    $paddingCharCount = substr_count($secret, '=');
+    $allowedValues = array(6, 4, 3, 1, 0);
+    
+    if (!in_array($paddingCharCount, $allowedValues)) return false;
+    
+    for ($i = 0; $i < 4; $i++) {
+        if ($paddingCharCount == $allowedValues[$i] &&
+            substr($secret, -($allowedValues[$i])) != str_repeat('=', $allowedValues[$i])) {
+            return false;
+        }
+    }
+    
+    $secret = str_replace('=', '', $secret);
+    $secret = str_split($secret);
+    $binaryString = '';
+    
+    for ($i = 0; $i < count($secret); $i = $i + 8) {
+        $x = '';
+        if (!in_array($secret[$i], str_split($base32chars))) return false;
+        
+        for ($j = 0; $j < 8; $j++) {
+            $x .= str_pad(base_convert(@$base32charsFlipped[@$secret[$i + $j]], 10, 2), 5, '0', STR_PAD_LEFT);
+        }
+        
+        $eightBits = str_split($x, 8);
+        for ($z = 0; $z < count($eightBits); $z++) {
+            $binaryString .= (($y = chr(base_convert($eightBits[$z], 2, 10))) || ord($y) == 48) ? $y : '';
+        }
+    }
+    
+    return $binaryString;
+}
+
+function get_totp_token($secret, $timeSlice = null) {
+    if ($timeSlice === null) {
+        $timeSlice = floor(time() / 30);
+    }
+    
+    $secretkey = base32_decode($secret);
+    if ($secretkey === false) return false;
+    
+    $time = chr(0).chr(0).chr(0).chr(0).pack('N*', $timeSlice);
+    $hm = hash_hmac('SHA1', $time, $secretkey, true);
+    $offset = ord(substr($hm, -1)) & 0x0F;
+    $hashpart = substr($hm, $offset, 4);
+    $value = unpack('N', $hashpart);
+    $value = $value[1];
+    $value = $value & 0x7FFFFFFF;
+    $modulo = pow(10, 6);
+    
+    return str_pad($value % $modulo, 6, '0', STR_PAD_LEFT);
+}
+
+// Generate current code
+$current_time = time();
+$current_timeslice = floor($current_time / 30);
+$decoded_secret = base32_decode($secret_clean);
+$current_code = get_totp_token($secret_clean);
+
+// Generate codes for ±3 windows
+$codes = [];
+for ($i = -3; $i <= 3; $i++) {
+    $timeslice = $current_timeslice + $i;
+    $code = get_totp_token($secret_clean, $timeslice);
+    $timestamp = $timeslice * 30;
+    $codes[] = [
+        'offset' => $i,
+        'code' => $code,
+        'time' => date('H:i:s', $timestamp),
+        'timestamp' => $timestamp
+    ];
+}
+
+// Test submitted code
+$test_result = null;
+if (isset($_POST['test_code'])) {
+    $test_code = preg_replace('/[^0-9]/', '', $_POST['test_code']);
+    
+    // Check against all windows
+    $matched = false;
+    $matched_offset = null;
+    
+    for ($i = -3; $i <= 3; $i++) {
+        $timeslice = $current_timeslice + $i;
+        $expected_code = get_totp_token($secret_clean, $timeslice);
+        
+        if ($test_code === $expected_code) {
+            $matched = true;
+            $matched_offset = $i;
+            break;
+        }
+    }
+    
+    $test_result = [
+        'code' => $test_code,
+        'matched' => $matched,
+        'offset' => $matched_offset
+    ];
+}
+
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced 2FA Diagnostic - HostingAura</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0f;
+            color: #e2e8f0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #6366f1;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .section {
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .section-title {
+            color: #8b5cf6;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #2a2a3e;
+            padding-bottom: 10px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(99,102,241,0.1);
+        }
+        .label {
+            color: #94a3b8;
+            font-weight: bold;
+        }
+        .value {
+            color: #e2e8f0;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .success {
+            color: #4ade80;
+            background: rgba(34,197,94,0.1);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(34,197,94,0.3);
+        }
+        .error {
+            color: #ef4444;
+            background: rgba(239,68,68,0.1);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(239,68,68,0.3);
+        }
+        .warning {
+            color: #fbbf24;
+            background: rgba(251,191,36,0.1);
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(251,191,36,0.3);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        th {
+            background: #2a2a3e;
+            padding: 10px;
+            text-align: left;
+            color: #6366f1;
+            font-size: 12px;
+        }
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #2a2a3e;
+        }
+        .current-code {
+            background: #4ade80;
+            color: #0a0a0f;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            background: #0a0a0f;
+            border: 1px solid #2a2a3e;
+            border-radius: 4px;
+            color: #e2e8f0;
+            font-size: 24px;
+            text-align: center;
+            letter-spacing: 8px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #6366f1;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #4f46e5;
+        }
+        .byte-display {
+            background: #0a0a0f;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+        .char-box {
+            display: inline-block;
+            padding: 5px;
+            margin: 2px;
+            background: #2a2a3e;
+            border-radius: 3px;
+            min-width: 30px;
+            text-align: center;
+        }
+        .invalid-char {
+            background: #ef4444;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 ADVANCED 2FA DIAGNOSTIC</h1>
+        <p style="color: #94a3b8; margin-bottom: 20px;">Byte-level secret analysis</p>
+        
+        <!-- SECRET VALIDATION -->
+        <div class="section">
+            <div class="section-title">🔑 Secret Key Analysis</div>
+            
+            <div class="info-row">
+                <span class="label">Raw Secret (from file):</span>
+                <span class="value"><?= htmlspecialchars($totp_secret) ?></span>
+            </div>
+            
+            <div class="info-row">
+                <span class="label">Cleaned Secret:</span>
+                <span class="value"><?= $secret_clean ?></span>
+            </div>
+            
+            <div class="info-row">
+                <span class="label">Length:</span>
+                <span class="value"><?= $secret_length ?> characters</span>
+            </div>
+            
+            <div style="margin-top: 15px;">
+                <strong style="color: #94a3b8;">Character-by-Character Analysis:</strong>
+                <div class="byte-display">
+                    <?php foreach ($secret_bytes as $idx => $char): ?>
+                        <span class="char-box <?= in_array($char, $invalid_chars) ? 'invalid-char' : '' ?>">
+                            <?= htmlspecialchars($char) ?>
+                            <br>
+                            <small style="color: #64748b;"><?= ord($char) ?></small>
+                        </span>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            
+            <?php if (count($invalid_chars) > 0): ?>
+                <div class="error" style="margin-top: 10px;">
+                    ❌ <strong>INVALID CHARACTERS FOUND:</strong> <?= implode(', ', $invalid_chars) ?>
+                    <br><br>
+                    Valid Base32 characters: A-Z and 2-7 only!
+                    <br>
+                    Invalid: <?= htmlspecialchars(implode('', $invalid_chars)) ?>
+                </div>
+            <?php else: ?>
+                <div class="success" style="margin-top: 10px;">
+                    ✅ All characters are valid Base32!
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($secret_length < 16): ?>
+                <div class="warning" style="margin-top: 10px;">
+                    ⚠️ Secret is too short! Should be 16+ characters. Current: <?= $secret_length ?>
+                </div>
+            <?php endif; ?>
+            
+            <?php if ($decoded_secret === false): ?>
+                <div class="error" style="margin-top: 10px;">
+                    ❌ <strong>SECRET CANNOT BE DECODED!</strong>
+                    <br>Base32 decoding failed. Secret is invalid!
+                </div>
+            <?php else: ?>
+                <div class="success" style="margin-top: 10px;">
+                    ✅ Secret successfully decoded to binary (<?= strlen($decoded_secret) ?> bytes)
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <!-- TIME INFORMATION -->
+        <div class="section">
+            <div class="section-title">⏰ Time Information</div>
+            
+            <div class="info-row">
+                <span class="label">Server Time:</span>
+                <span class="value"><?= date('Y-m-d H:i:s T') ?></span>
+            </div>
+            
+            <div class="info-row">
+                <span class="label">Unix Timestamp:</span>
+                <span class="value"><?= $current_time ?></span>
+            </div>
+            
+            <div class="info-row">
+                <span class="label">Time Slice:</span>
+                <span class="value"><?= $current_timeslice ?> (30-sec windows)</span>
+            </div>
+            
+            <div class="info-row">
+                <span class="label">Timezone:</span>
+                <span class="value"><?= date_default_timezone_get() ?></span>
+            </div>
+        </div>
+        
+        <!-- CURRENT CODE -->
+        <div class="section">
+            <div class="section-title">🎯 EXPECTED CODE FROM YOUR APP</div>
+            
+            <?php if ($current_code === false): ?>
+                <div class="error">
+                    ❌ Cannot generate code - Secret is invalid!
+                </div>
+            <?php else: ?>
+                <div style="text-align: center; padding: 30px;">
+                    <div style="color: #94a3b8; margin-bottom: 10px;">Your authenticator app should show:</div>
+                    <div style="font-size: 48px; font-weight: bold; color: #4ade80; letter-spacing: 10px; font-family: monospace;">
+                        <?= $current_code ?>
+                    </div>
+                    <div style="color: #64748b; margin-top: 10px; font-size: 12px;">
+                        Valid for next <?= 30 - ($current_time % 30) ?> seconds
+                    </div>
+                </div>
+                
+                <div class="warning">
+                    ⚠️ <strong>CRITICAL CHECK:</strong>
+                    <br>Does your authenticator app show <strong><?= $current_code ?></strong> right now?
+                    <br><br>
+                    ✅ <strong>YES</strong> = Secret is correct! Codes will work!
+                    <br>❌ <strong>NO</strong> = Secret in app is DIFFERENT from this file!
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <!-- ALL VALID CODES -->
+        <div class="section">
+            <div class="section-title">📊 All Valid Codes (±90 seconds)</div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th>Offset</th>
+                        <th>Time</th>
+                        <th>Code</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($codes as $c): ?>
+                    <tr style="<?= $c['offset'] == 0 ? 'background: rgba(74,222,128,0.1);' : '' ?>">
+                        <td><?= $c['offset'] > 0 ? '+' : '' ?><?= $c['offset'] ?></td>
+                        <td><?= $c['time'] ?></td>
+                        <td>
+                            <?php if ($c['offset'] == 0): ?>
+                                <span class="current-code"><?= $c['code'] ?></span>
+                            <?php else: ?>
+                                <?= $c['code'] ?>
+                            <?php endif; ?>
+                        </td>
+                        <td style="font-size: 11px; color: #64748b;"><?= $c['timestamp'] ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- TEST CODE -->
+        <div class="section">
+            <div class="section-title">🧪 Test Your App's Code</div>
+            
+            <form method="POST">
+                <p style="color: #94a3b8; margin-bottom: 10px;">Enter the code from your authenticator app:</p>
+                <input 
+                    type="text" 
+                    name="test_code" 
+                    placeholder="000000"
+                    maxlength="6"
+                    pattern="[0-9]{6}"
+                    required
+                    autocomplete="off"
+                >
+                <button type="submit">🔍 Test This Code</button>
+            </form>
+            
+            <?php if ($test_result): ?>
+                <?php if ($test_result['matched']): ?>
+                    <div class="success" style="margin-top: 15px;">
+                        ✅ <strong>CODE <?= $test_result['code'] ?> IS VALID!</strong>
+                        <br><br>
+                        Matched at offset: <?= $test_result['offset'] ?>
+                        <br>This code WILL work for login!
+                        <br><br>
+                        <strong>→ Go to admin dashboard and use this code!</strong>
+                    </div>
+                <?php else: ?>
+                    <div class="error" style="margin-top: 15px;">
+                        ❌ <strong>CODE <?= $test_result['code'] ?> IS INVALID!</strong>
+                        <br><br>
+                        This code does NOT match any valid window.
+                        <br><br>
+                        <strong>This means:</strong>
+                        <ul style="margin-left: 20px; margin-top: 10px;">
+                            <li>The secret in your authenticator app ≠ secret in this file</li>
+                            <li>You need to DELETE from app and add manually with EXACT secret above</li>
+                        </ul>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+        
+        <!-- MANUAL SETUP INSTRUCTIONS -->
+        <div class="section">
+            <div class="section-title">📱 Manual Setup Instructions</div>
+            
+            <div class="warning">
+                <strong>If codes don't match, add manually:</strong>
+                <br><br>
+                1. Delete "HostingAura Admin" from authenticator app
+                <br>
+                2. Choose "Enter a setup key" or "Manual entry"
+                <br>
+                3. Account name: <strong>HostingAura Admin</strong>
+                <br>
+                4. Your key: <strong><?= $secret_clean ?></strong>
+                <br>
+                5. Type: <strong>Time-based</strong>
+                <br>
+                6. Click Add/Save
+                <br>
+                7. App should show: <strong><?= $current_code ?></strong>
+            </div>
+        </div>
+        
+        <div style="text-align: center; color: #64748b; font-size: 12px; margin-top: 30px;">
+            Auto-refresh in <span id="countdown">30</span>s
+        </div>
+    </div>
+    
+    <script>
+        let countdown = 30;
+        setInterval(() => {
+            countdown--;
+            document.getElementById('countdown').textContent = countdown;
+            if (countdown <= 0) {
+                location.reload();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
