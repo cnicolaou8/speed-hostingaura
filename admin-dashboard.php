@@ -19,6 +19,7 @@ require_once 'config.php';
 
 $admin_password = ''; // ⚠️ CHANGE THIS PASSWORD!
 $totp_secret = ''; // ⚠️ CHANGE THIS SECRET!
+$admin_phone = '+35796662666'; // Admin phone for OTP verification
 
 /**
  * CRITICAL: Generate a new TOTP secret (Base32 format)
@@ -618,6 +619,318 @@ if (!isset($_SESSION['admin_2fa_verified'])) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// HTML EMAIL TEMPLATE FUNCTION
+// ═══════════════════════════════════════════════════════════════
+
+function getEmailTemplate($subject, $message, $recipientName = 'User') {
+    $htmlMessage = '
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>' . htmlspecialchars($subject) . '</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .email-header {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 10px;
+        }
+        .tagline {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+        }
+        .email-body {
+            padding: 40px 30px;
+            color: #374151;
+            line-height: 1.6;
+        }
+        .greeting {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        .message-content {
+            font-size: 15px;
+            color: #4b5563;
+            white-space: pre-wrap;
+            margin: 20px 0;
+        }
+        .email-footer {
+            background: #f9fafb;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        .footer-text {
+            color: #6b7280;
+            font-size: 13px;
+            margin: 5px 0;
+        }
+        .footer-links {
+            margin-top: 15px;
+        }
+        .footer-link {
+            color: #6366f1;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 13px;
+        }
+        .divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #e5e7eb, transparent);
+            margin: 30px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="email-header">
+            <div class="logo">🚀 HostingAura</div>
+            <div class="tagline">Premium Speed Testing & Hosting Services</div>
+        </div>
+        
+        <!-- Body -->
+        <div class="email-body">
+            <div class="greeting">Hello ' . htmlspecialchars($recipientName) . ',</div>
+            <div class="message-content">' . nl2br(htmlspecialchars($message)) . '</div>
+            <div class="divider"></div>
+            <p style="color: #6b7280; font-size: 14px;">
+                If you have any questions, feel free to contact our support team.
+            </p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="email-footer">
+            <div class="footer-text">
+                <strong>HostingAura</strong> - Fast. Reliable. Secure.
+            </div>
+            <div class="footer-text">
+                This email was sent from HostingAura Speed Test Platform
+            </div>
+            <div class="footer-links">
+                <a href="https://speed.hostingaura.com" class="footer-link">Speed Test</a>
+                <a href="https://hostingaura.com" class="footer-link">Website</a>
+                <a href="mailto:support@hostingaura.com" class="footer-link">Support</a>
+            </div>
+            <div class="footer-text" style="margin-top: 15px; font-size: 11px;">
+                © ' . date('Y') . ' HostingAura. All rights reserved.
+            </div>
+        </div>
+    </div>
+</body>
+</html>';
+    
+    return $htmlMessage;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MESSAGING HANDLER (with OTP verification)
+// ═══════════════════════════════════════════════════════════════
+
+$message_status = null;
+
+// Handle OTP request for messaging
+if (isset($_POST['request_messaging_otp'])) {
+    $otp_code = str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
+    $_SESSION['messaging_otp'] = $otp_code;
+    $_SESSION['messaging_otp_time'] = time();
+    $_SESSION['pending_message'] = [
+        'type' => $_POST['message_type'],
+        'user_id' => $_POST['user_id'],
+        'message' => $_POST['message'],
+        'subject' => $_POST['subject'] ?? null,
+        'use_template' => isset($_POST['use_template']) ? true : false
+    ];
+    
+    // Send OTP to admin via ClickSend
+    $message_text = "HostingAura Admin: Your OTP to send message is: $otp_code (valid 5 min)";
+    
+    // ClickSend credentials (same as sent_otp.php)
+    $clicksend_username = 'c.nicolaou8@proton.me';
+    $clicksend_api_key = '68C59FBA-E081-1EE4-B235-442523A526F8';
+    
+    $clicksend_message = [
+        'messages' => [[
+            'to' => $admin_phone,
+            'body' => $message_text,
+            'from' => 'hostingaura',
+            'source' => 'php'
+        ]]
+    ];
+    
+    $ch = curl_init('https://rest.clicksend.com/v3/sms/send');
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'Content-Type: application/json',
+        'Authorization: Basic ' . base64_encode($clicksend_username . ':' . $clicksend_api_key)
+    ]);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($clicksend_message));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    // Check if SMS was actually sent
+    if ($http_code == 200) {
+        $message_status = ['type' => 'success', 'message' => 'OTP sent to your phone (+35796662666)!'];
+    } else {
+        $message_status = ['type' => 'error', 'message' => 'Failed to send OTP. ClickSend error: ' . $http_code . '. Response: ' . substr($response, 0, 200)];
+        // Clear the session since OTP wasn't sent
+        unset($_SESSION['messaging_otp']);
+        unset($_SESSION['messaging_otp_time']);
+        unset($_SESSION['pending_message']);
+    }
+}
+
+// Handle message sending with OTP verification
+if (isset($_POST['send_with_otp'])) {
+    $entered_otp = $_POST['otp_code'];
+    $stored_otp = $_SESSION['messaging_otp'] ?? null;
+    $otp_time = $_SESSION['messaging_otp_time'] ?? 0;
+    
+    // Check OTP validity (5 minutes)
+    if ($stored_otp && $entered_otp == $stored_otp && (time() - $otp_time) < 300) {
+        $pending = $_SESSION['pending_message'];
+        $db_temp = getDBConnection();
+        
+        if ($pending['type'] === 'sms') {
+            // Send SMS
+            $user_result = $db_temp->query("SELECT phone FROM users WHERE id = " . (int)$pending['user_id']);
+            $user = $user_result->fetch_assoc();
+            
+            if ($user && $user['phone']) {
+                // ClickSend credentials
+                $clicksend_username = 'c.nicolaou8@proton.me';
+                $clicksend_api_key = 'CLICK SEND API';
+                
+                $clicksend_message = [
+                    'messages' => [[
+                        'to' => $user['phone'],
+                        'body' => $pending['message'],
+                        'from' => 'hostingaura',
+                        'source' => 'php'
+                    ]]
+                ];
+                
+                $ch = curl_init('https://rest.clicksend.com/v3/sms/send');
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    'Authorization: Basic ' . base64_encode($clicksend_username . ':' . $clicksend_api_key)
+                ]);
+                curl_setopt($ch, CURLOPT_POST, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($clicksend_message));
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                
+                $response = curl_exec($ch);
+                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                $status = ($http_code == 200) ? 'sent' : 'failed';
+                $cost = ($status == 'sent') ? 0.05 : 0;
+                
+                // Log to database
+                $stmt = $db_temp->prepare("INSERT INTO sms_logs (recipient_phone, message_text, message_type, user_id, status, cost, created_at) VALUES (?, ?, 'admin_message', ?, ?, ?, NOW())");
+                $stmt->bind_param("ssisd", $user['phone'], $pending['message'], $pending['user_id'], $status, $cost);
+                $stmt->execute();
+                
+                if ($status == 'sent') {
+                    $message_status = ['type' => 'success', 'message' => 'SMS sent successfully to ' . htmlspecialchars($user['phone']) . '!'];
+                } else {
+                    $message_status = ['type' => 'error', 'message' => 'Failed to send SMS. Error code: ' . $http_code];
+                }
+            } else {
+                $message_status = ['type' => 'error', 'message' => 'User has no phone number'];
+            }
+            
+        } elseif ($pending['type'] === 'email') {
+            // Send Email
+            $user_result = $db_temp->query("SELECT email, phone FROM users WHERE id = " . (int)$pending['user_id']);
+            $user = $user_result->fetch_assoc();
+            
+            if ($user && $user['email']) {
+                $to = $user['email'];
+                $subject = $pending['subject'];
+                $message_body = $pending['message'];
+                $use_template = $pending['use_template'] ?? false;
+                
+                // Get user name (email or phone)
+                $user_name = $user['email'] ?: $user['phone'] ?: 'User';
+                
+                if ($use_template) {
+                    // Send HTML email with template
+                    $html_message = getEmailTemplate($subject, $message_body, $user_name);
+                    
+                    $headers = "From: HostingAura <noreply@hostingaura.com>\r\n";
+                    $headers .= "Reply-To: support@hostingaura.com\r\n";
+                    $headers .= "MIME-Version: 1.0\r\n";
+                    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+                    
+                    $success = mail($to, $subject, $html_message, $headers);
+                } else {
+                    // Send plain text email
+                    $headers = "From: noreply@hostingaura.com\r\n";
+                    $headers .= "Reply-To: support@hostingaura.com\r\n";
+                    $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+                    
+                    $success = mail($to, $subject, $message_body, $headers);
+                }
+                
+                $status = $success ? 'sent' : 'failed';
+                
+                // Log to database (FIXED: user_id is integer)
+                $email_type = $use_template ? 'admin_message_html' : 'admin_message';
+                $stmt = $db_temp->prepare("INSERT INTO email_logs (recipient_email, subject, message_text, email_type, user_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+                $stmt->bind_param("ssssis", $to, $subject, $message_body, $email_type, $pending['user_id'], $status);
+                $stmt->execute();
+                
+                if ($status == 'sent') {
+                    $template_note = $use_template ? ' (HTML template)' : ' (plain text)';
+                    $message_status = ['type' => 'success', 'message' => 'Email sent successfully to ' . htmlspecialchars($to) . $template_note];
+                } else {
+                    $message_status = ['type' => 'error', 'message' => 'Failed to send email'];
+                }
+            } else {
+                $message_status = ['type' => 'error', 'message' => 'User has no email address'];
+            }
+        }
+        
+        // Clear OTP session
+        unset($_SESSION['messaging_otp']);
+        unset($_SESSION['messaging_otp_time']);
+        unset($_SESSION['pending_message']);
+        
+    } else {
+        $message_status = ['type' => 'error', 'message' => 'Invalid or expired OTP'];
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // BOTH PASSWORD AND 2FA VERIFIED - LOAD DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 
@@ -718,6 +1031,12 @@ if ($view === 'tests') {
         LIMIT $limit
     ");
     $tests_data = $tests_query->fetch_all(MYSQLI_ASSOC);
+}
+
+// Get all users for send message dropdown
+if ($view === 'send') {
+    $all_users_query = $db->query("SELECT id, email, phone FROM users ORDER BY created_at DESC");
+    $all_users = $all_users_query->fetch_all(MYSQLI_ASSOC);
 }
 
 // CSV Export
@@ -1021,6 +1340,25 @@ if (isset($_GET['export'])) {
             color: #ef4444;
         }
         
+        /* Success/Error Message Boxes */
+        .success {
+            background: rgba(34,197,94,0.1);
+            color: #4ade80;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(34,197,94,0.3);
+            font-size: 14px;
+        }
+        
+        .error {
+            background: rgba(239,68,68,0.1);
+            color: #ef4444;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(239,68,68,0.3);
+            font-size: 14px;
+        }
+        
         /* Welcome Section */
         .welcome-section {
             text-align: center;
@@ -1128,6 +1466,7 @@ if (isset($_GET['export'])) {
             <a href="?view=tests" class="tab <?= $view === 'tests' ? 'active' : '' ?>">🚀 Speed Tests</a>
             <a href="?view=sms" class="tab <?= $view === 'sms' ? 'active' : '' ?>">📱 SMS Logs</a>
             <a href="?view=emails" class="tab <?= $view === 'emails' ? 'active' : '' ?>">📧 Email Logs</a>
+            <a href="?view=send" class="tab <?= $view === 'send' ? 'active' : '' ?>">📤 Send Message</a>
         </div>
         
         <!-- Content Section -->
@@ -1336,6 +1675,179 @@ if (isset($_GET['export'])) {
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                
+            <?php elseif ($view === 'send'): ?>
+                <!-- Send Message (with OTP verification) -->
+                <div class="section-header">
+                    <h2 class="section-title">📤 Send Message to User</h2>
+                </div>
+                
+                <?php if ($message_status): ?>
+                    <div class="<?= $message_status['type'] === 'error' ? 'error' : 'success' ?>" style="margin-bottom: 20px; padding: 16px; border-radius: 8px;">
+                        <?= $message_status['type'] === 'success' ? '✅' : '❌' ?>
+                        <?= htmlspecialchars($message_status['message']) ?>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if (isset($_SESSION['messaging_otp'])): ?>
+                    <!-- OTP Verification Step -->
+                    <div style="max-width: 600px; margin: 0 auto; padding: 40px; background: rgba(99,102,241,0.05); border-radius: 12px; border: 1px solid rgba(99,102,241,0.2);">
+                        <h3 style="color: #6366f1; margin-bottom: 20px;">🔐 Enter OTP to Confirm</h3>
+                        <p style="color: #94a3b8; margin-bottom: 20px;">
+                            An OTP has been sent to your phone: <strong>+35796662666</strong>
+                            <br>Enter the 4-digit code to send the message.
+                        </p>
+                        
+                        <form method="POST" style="margin-top: 20px;">
+                            <input 
+                                type="text" 
+                                name="otp_code" 
+                                placeholder="0000" 
+                                maxlength="4" 
+                                pattern="[0-9]{4}"
+                                required
+                                autofocus
+                                autocomplete="off"
+                                style="width: 100%; padding: 16px; font-size: 32px; text-align: center; letter-spacing: 16px; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; color: #e2e8f0; font-family: monospace; margin-bottom: 16px;"
+                            >
+                            <button type="submit" name="send_with_otp" style="width: 100%; padding: 16px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 8px; color: white; font-weight: 600; font-size: 16px; cursor: pointer;">
+                                ✓ Verify & Send Message
+                            </button>
+                            <a href="?view=send" style="display: block; text-align: center; margin-top: 16px; color: #64748b; text-decoration: none;">Cancel</a>
+                        </form>
+                        
+                        <div style="margin-top: 20px; padding: 12px; background: rgba(251,191,36,0.1); border-radius: 6px; border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; font-size: 13px;">
+                            ⏰ OTP expires in <?= 5 - floor((time() - ($_SESSION['messaging_otp_time'] ?? time())) / 60) ?> minutes
+                        </div>
+                    </div>
+                    
+                <?php else: ?>
+                    <!-- Message Composition Forms -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 30px; margin-top: 30px;">
+                        
+                        <!-- Send SMS Form -->
+                        <div style="background: rgba(99,102,241,0.05); border-radius: 12px; padding: 30px; border: 1px solid rgba(99,102,241,0.2);">
+                            <h3 style="color: #6366f1; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                                📱 Send SMS
+                            </h3>
+                            
+                            <form method="POST">
+                                <input type="hidden" name="message_type" value="sms">
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <label style="display: block; color: #94a3b8; margin-bottom: 8px; font-size: 14px;">Select User:</label>
+                                    <select name="user_id" required style="width: 100%; padding: 12px; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; color: #e2e8f0; font-size: 14px;">
+                                        <option value="">Choose a user...</option>
+                                        <?php foreach ($all_users as $u): ?>
+                                            <?php if ($u['phone']): ?>
+                                                <option value="<?= $u['id'] ?>">
+                                                    <?= htmlspecialchars($u['phone']) ?>
+                                                    <?= $u['email'] ? ' (' . htmlspecialchars($u['email']) . ')' : '' ?>
+                                                </option>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <label style="display: block; color: #94a3b8; margin-bottom: 8px; font-size: 14px;">Message:</label>
+                                    <textarea 
+                                        name="message" 
+                                        required 
+                                        maxlength="160"
+                                        rows="4"
+                                        placeholder="Type your message here..."
+                                        style="width: 100%; padding: 12px; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; color: #e2e8f0; font-size: 14px; resize: vertical; font-family: inherit;"
+                                    ></textarea>
+                                    <small style="color: #64748b; font-size: 12px;">Max 160 characters</small>
+                                </div>
+                                
+                                <button type="submit" name="request_messaging_otp" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; border-radius: 8px; color: white; font-weight: 600; font-size: 15px; cursor: pointer;">
+                                    📱 Send SMS (€0.05)
+                                </button>
+                            </form>
+                            
+                            <div style="margin-top: 20px; padding: 12px; background: rgba(251,191,36,0.1); border-radius: 6px; border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; font-size: 12px;">
+                                🔐 You'll receive an OTP before sending
+                            </div>
+                        </div>
+                        
+                        <!-- Send Email Form -->
+                        <div style="background: rgba(139,92,246,0.05); border-radius: 12px; padding: 30px; border: 1px solid rgba(139,92,246,0.2);">
+                            <h3 style="color: #8b5cf6; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                                📧 Send Email
+                            </h3>
+                            
+                            <form method="POST">
+                                <input type="hidden" name="message_type" value="email">
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <label style="display: block; color: #94a3b8; margin-bottom: 8px; font-size: 14px;">Select User:</label>
+                                    <select name="user_id" required style="width: 100%; padding: 12px; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; color: #e2e8f0; font-size: 14px;">
+                                        <option value="">Choose a user...</option>
+                                        <?php foreach ($all_users as $u): ?>
+                                            <?php if ($u['email']): ?>
+                                                <option value="<?= $u['id'] ?>">
+                                                    <?= htmlspecialchars($u['email']) ?>
+                                                    <?= $u['phone'] ? ' (' . htmlspecialchars($u['phone']) . ')' : '' ?>
+                                                </option>
+                                            <?php endif; ?>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <label style="display: block; color: #94a3b8; margin-bottom: 8px; font-size: 14px;">Subject:</label>
+                                    <input 
+                                        type="text" 
+                                        name="subject" 
+                                        required 
+                                        placeholder="Email subject..."
+                                        style="width: 100%; padding: 12px; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; color: #e2e8f0; font-size: 14px;"
+                                    >
+                                </div>
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <label style="display: block; color: #94a3b8; margin-bottom: 8px; font-size: 14px;">Message:</label>
+                                    <textarea 
+                                        name="message" 
+                                        required 
+                                        rows="6"
+                                        placeholder="Type your email message here..."
+                                        style="width: 100%; padding: 12px; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 8px; color: #e2e8f0; font-size: 14px; resize: vertical; font-family: inherit;"
+                                    ></textarea>
+                                </div>
+                                
+                                <div style="margin-bottom: 20px; padding: 15px; background: rgba(99,102,241,0.05); border-radius: 8px; border: 1px solid rgba(99,102,241,0.2);">
+                                    <label style="display: flex; align-items: center; cursor: pointer; color: #e2e8f0; font-size: 14px;">
+                                        <input 
+                                            type="checkbox" 
+                                            name="use_template" 
+                                            checked
+                                            style="width: 18px; height: 18px; margin-right: 10px; cursor: pointer;"
+                                        >
+                                        <span>
+                                            <strong style="color: #6366f1;">✨ Use HTML Template</strong>
+                                            <br>
+                                            <small style="color: #94a3b8; font-size: 12px;">
+                                                Send with HostingAura branding, logo, and colors (recommended)
+                                            </small>
+                                        </span>
+                                    </label>
+                                </div>
+                                
+                                <button type="submit" name="request_messaging_otp" style="width: 100%; padding: 14px; background: linear-gradient(135deg, #8b5cf6, #a855f7); border: none; border-radius: 8px; color: white; font-weight: 600; font-size: 15px; cursor: pointer;">
+                                    📧 Send Email (Free)
+                                </button>
+                            </form>
+                            
+                            <div style="margin-top: 20px; padding: 12px; background: rgba(251,191,36,0.1); border-radius: 6px; border: 1px solid rgba(251,191,36,0.3); color: #fbbf24; font-size: 12px;">
+                                🔐 You'll receive an OTP before sending
+                            </div>
+                        </div>
+                        
+                    </div>
+                <?php endif; ?>
                 
             <?php endif; ?>
             
