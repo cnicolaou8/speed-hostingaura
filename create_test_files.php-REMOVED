@@ -1,0 +1,39 @@
+<?php
+// Only allow running once - basic protection
+$secret = $_GET['key'] ?? '';
+if ($secret !== 'setup2024') {
+    die('Unauthorized');
+}
+
+$dir = __DIR__ . '/test-files';
+if (!is_dir($dir)) {
+    mkdir($dir, 0755, true);
+}
+
+$files = [
+    '10mb.bin'  => 10,
+    '25mb.bin'  => 25,
+    '50mb.bin'  => 50,
+    '100mb.bin' => 100,
+];
+
+foreach ($files as $filename => $sizeMB) {
+    $path = $dir . '/' . $filename;
+    if (file_exists($path)) {
+        echo "⏭️ Skipped (already exists): $filename<br>";
+        continue;
+    }
+
+    $fp = fopen($path, 'wb');
+    $chunkSize = 1024 * 1024; // 1MB chunks
+    for ($i = 0; $i < $sizeMB; $i++) {
+        fwrite($fp, random_bytes($chunkSize));
+    }
+    fclose($fp);
+    chmod($path, 0644);
+    echo "✅ Created: $filename ({$sizeMB}MB)<br>";
+    flush();
+}
+
+echo "<br>✅ All done! Now DELETE this file from Plesk!";
+?>

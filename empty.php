@@ -1,44 +1,36 @@
 <?php
 // ══════════════════════════════════════════════════════════════
-// empty.php — Deletes temporary files used during speed testing
-// Called via AJAX from index.html after upload test completes
-// Keeps the uploads folder clean by removing test files
+// empty.php — Upload sink for speed test
+// Streams and discards data as fast as possible
 // ══════════════════════════════════════════════════════════════
-header("Content-Type: application/json");
 
-// ── DEFINE UPLOAD FOLDER PATH ────────────────────────────────
-$uploadDir = __DIR__ . '/uploads/';
+// Disable output buffering completely
+if (ob_get_level()) ob_end_clean();
 
-// ── CHECK IF FOLDER EXISTS ────────────────────────────────────
-if (!is_dir($uploadDir)) {
-    echo json_encode(["status" => "success", "message" => "Nothing to clean"]);
+// No time limit, no memory waste
+set_time_limit(30);
+
+// Allow cross-origin uploads
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+header('Content-Type: application/json');
+header('Cache-Control: no-store, no-cache');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
     exit;
 }
 
-// ══════════════════════════════════════════════════════════════
-// DELETE ALL FILES IN UPLOADS FOLDER
-// Skips . and .. (current and parent directory references)
-// ══════════════════════════════════════════════════════════════
-$files   = scandir($uploadDir);
-$deleted = 0;
-
-foreach ($files as $file) {
-    // Skip directories — only delete files
-    if ($file === '.' || $file === '..') continue;
-
-    $filePath = $uploadDir . $file;
-
-    if (is_file($filePath)) {
-        unlink($filePath);
-        $deleted++;
+// Stream and discard — never buffer into memory
+$input = fopen('php://input', 'rb');
+$bytes = 0;
+if ($input) {
+    while (!feof($input)) {
+        $chunk  = fread($input, 65536); // 64KB chunks
+        $bytes += strlen($chunk);
     }
+    fclose($input);
 }
 
-// ══════════════════════════════════════════════════════════════
-// SUCCESS
-// ══════════════════════════════════════════════════════════════
-echo json_encode([
-    "status"  => "success",
-    "deleted" => $deleted
-]);
-?>
+echo json_encode(['ok' => true, 'bytes' => $bytes]);
