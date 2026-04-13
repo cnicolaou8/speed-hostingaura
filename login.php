@@ -20,7 +20,7 @@ if (!$conn) {
 $data = json_decode(file_get_contents('php://input'), true);
 $contact = trim($data['contact'] ?? '');
 $password = $data['password'] ?? '';
-$turnstileToken = $data['turnstile_token'] ?? '';
+$turnstileToken = $data['turnstile'] ?? '';
 
 // ══════════════════════════════════════════════════════════════
 // VERIFY CLOUDFLARE TURNSTILE
