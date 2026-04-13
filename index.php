@@ -1,8 +1,8 @@
 <?php
 // ══════════════════════════════════════════════════════════════
-// HostingAura Speed Test - FINAL VERSION
-// Engine: LibreSpeed methodology + Cloudflare CDN cached files
-// Result: ACCURATE gigabit speeds!
+// HostingAura Speed Test - COMPLETE VERSION
+// Speed Test: LUMO's optimizations
+// Auth: All features restored
 // ══════════════════════════════════════════════════════════════
 session_start();
 require_once 'config.php';
@@ -81,6 +81,32 @@ body{min-height:100vh;background:#070711;background-image:radial-gradient(ellips
 #report-btn:hover{color:#f87171}
 .hist-wrap{width:100%;max-width:360px;margin-top:25px}
 .hist-item{background:#0c0c1c;border:1px solid #181830;border-radius:10px;display:flex;padding:10px;margin-bottom:7px;font-size:0.75rem;justify-content:space-between;align-items:center}
+
+/* MODAL STYLES */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.active{display:flex}
+.modal{background:#0f0f1a;border:1px solid #1e1e3a;border-radius:18px;padding:28px 24px;width:100%;max-width:360px;position:relative;max-height:92vh;overflow-y:auto}
+.modal h2{font-size:1.1rem;font-weight:700;margin-bottom:4px;color:#e2e8f0}
+.modal p.sub{font-size:.7rem;color:#475569;margin-bottom:20px}
+.modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:#475569;font-size:1.2rem;cursor:pointer}
+.modal-close:hover{color:#e2e8f0}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:6px}
+.form-group input,.form-group select,.form-group textarea{width:100%;background:#0c0c1c;border:1px solid #1e1e3a;border-radius:8px;padding:10px 12px;font-size:.85rem;color:#e2e8f0;outline:none;transition:.2s;font-family:inherit}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#6366f1}
+.form-submit{width:100%;background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:999px;padding:11px;font-size:.9rem;font-weight:600;cursor:pointer;margin-top:6px;transition:.2s}
+.form-submit:hover{opacity:.85}
+.form-submit:disabled{opacity:.5;cursor:not-allowed}
+.modal-msg{font-size:.72rem;text-align:center;margin-top:10px;min-height:1rem}
+.modal-msg.error{color:#ff4d4d}
+.modal-msg.success{color:#22c55e}
+.modal-switch{font-size:.68rem;color:#475569;text-align:center;margin-top:14px}
+.modal-switch a{color:#6366f1;cursor:pointer;text-decoration:none;font-weight:600}
+.modal-switch a:hover{text-decoration:underline}
+.type-toggle{display:flex;gap:8px;margin-bottom:16px}
+.type-toggle button{flex:1;background:#0c0c1c;border:1px solid #1e1e3a;border-radius:8px;padding:7px;font-size:.68rem;color:#94a3b8;cursor:pointer;transition:.2s}
+.type-toggle button.active{border-color:#6366f1;color:#6366f1;background:#1a1a2e}
+.turnstile-widget{margin:14px 0;display:flex;justify-content:center;min-height:65px}
 </style>
 </head>
 <body>
@@ -99,8 +125,8 @@ body{min-height:100vh;background:#070711;background-image:radial-gradient(ellips
     <a href="dashboard.php" class="dashboard-btn">My History</a>
     <button class="auth-btn danger" onclick="doLogout()">Logout</button>
   <?php else: ?>
-    <button class="auth-btn" onclick="alert('Login modal')">Log In</button>
-    <button class="auth-btn primary" onclick="alert('Register modal')">Sign Up</button>
+    <button class="auth-btn" onclick="openModal('modal-login')">Log In</button>
+    <button class="auth-btn primary" onclick="openModal('modal-register')">Sign Up</button>
   <?php endif; ?>
 </div>
 
@@ -156,25 +182,130 @@ body{min-height:100vh;background:#070711;background-image:radial-gradient(ellips
   <button id="share-btn" onclick="shareResults()">Share Link</button>
 </div>
 
-<button id="report-btn">⚑ Report an issue with this result</button>
+<button id="report-btn" onclick="openReportModal()">⚑ Report an issue with this result</button>
 <div class="hist-wrap" id="hist-list"></div>
+
+<!-- LOGIN MODAL -->
+<div class="modal-overlay" id="modal-login">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-login')">×</button>
+    <h2>Welcome Back</h2>
+    <p class="sub">Log in to access your speed test history</p>
+    
+    <div class="type-toggle">
+      <button class="active" onclick="setLoginType('email')">Email</button>
+      <button onclick="setLoginType('phone')">Phone</button>
+    </div>
+    
+    <form id="form-login" onsubmit="doLogin(event)">
+      <div class="form-group">
+        <label id="login-label">Email</label>
+        <input type="text" id="login-contact" required/>
+      </div>
+      <div class="turnstile-widget" id="login-turnstile"></div>
+      <button type="submit" class="form-submit" id="login-btn">Log In</button>
+      <div class="modal-msg" id="login-msg"></div>
+    </form>
+    
+    <div class="modal-switch">
+      Don't have an account? <a onclick="switchModal('modal-login','modal-register')">Sign Up</a>
+    </div>
+    <div class="modal-switch">
+      <a onclick="switchModal('modal-login','modal-forgot')">Forgot Password?</a>
+    </div>
+  </div>
+</div>
+
+<!-- REGISTER MODAL -->
+<div class="modal-overlay" id="modal-register">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-register')">×</button>
+    <h2>Create Account</h2>
+    <p class="sub">Join HostingAura to track your speed tests</p>
+    
+    <div class="type-toggle">
+      <button class="active" onclick="setRegisterType('email')">Email</button>
+      <button onclick="setRegisterType('phone')">Phone</button>
+    </div>
+    
+    <form id="form-register" onsubmit="doRegister(event)">
+      <div class="form-group">
+        <label id="register-label">Email</label>
+        <input type="text" id="register-contact" required/>
+      </div>
+      <div class="turnstile-widget" id="register-turnstile"></div>
+      <button type="submit" class="form-submit">Sign Up</button>
+      <div class="modal-msg" id="register-msg"></div>
+    </form>
+    
+    <div class="modal-switch">
+      Already have an account? <a onclick="switchModal('modal-register','modal-login')">Log In</a>
+    </div>
+  </div>
+</div>
+
+<!-- VERIFY OTP MODAL -->
+<div class="modal-overlay" id="modal-verify">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-verify')">×</button>
+    <h2>Verify Code</h2>
+    <p class="sub">Enter the 6-digit code sent to <span id="verify-contact-display"></span></p>
+    
+    <form id="form-verify" onsubmit="doVerify(event)">
+      <div class="form-group">
+        <label>Verification Code</label>
+        <input type="text" id="verify-code" maxlength="6" pattern="\d{6}" required/>
+      </div>
+      <button type="submit" class="form-submit">Verify</button>
+      <div class="modal-msg" id="verify-msg"></div>
+    </form>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div class="modal-overlay" id="modal-forgot">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('modal-forgot')">×</button>
+    <h2>Reset Password</h2>
+    <p class="sub">We'll send you a verification code</p>
+    
+    <div class="type-toggle">
+      <button class="active" onclick="setForgotType('email')">Email</button>
+      <button onclick="setForgotType('phone')">Phone</button>
+    </div>
+    
+    <form id="form-forgot" onsubmit="doForgot(event)">
+      <div class="form-group">
+        <label id="forgot-label">Email</label>
+        <input type="text" id="forgot-contact" required/>
+      </div>
+      <div class="turnstile-widget" id="forgot-turnstile"></div>
+      <button type="submit" class="form-submit">Send Code</button>
+      <div class="modal-msg" id="forgot-msg"></div>
+    </form>
+    
+    <div class="modal-switch">
+      <a onclick="closeModal('modal-forgot'); openModal('modal-login')">Back to Log In</a>
+    </div>
+  </div>
+</div>
 
 <script>
 'use strict';
 
-console.log('🚀 HostingAura Speed Test - OPTIMIZED VERSION');
-console.log('📡 Multi-stream + 30s duration = Accurate Gigabit results!');
+console.log('🚀 HostingAura Speed Test - COMPLETE VERSION');
 
 // ══════════════════════════════════════════════════════════════
-// CONFIG - CHANGED: Multi-file support for accuracy
+// CONFIG
 // ══════════════════════════════════════════════════════════════
+const TURNSTILE_SITE_KEY = '<?= TURNSTILE_SITE_KEY ?>';
 const TEST_FILES = [
     '/test-files/100mb.bin',
     '/test-files/50mb.bin',
     '/test-files/25mb.bin',
     '/test-files/10mb.bin'
 ];
-const UPLOAD_ENDPOINT = 'upload_receiver.php'; // CHANGED: New upload receiver
+const UPLOAD_ENDPOINT = 'empty.php';
 
 const ARC_LEN = 518.36;
 const MAX_SPEED = 1000;
@@ -184,8 +315,18 @@ let lastResult = { shareLink: null, testId: null, dl: '–', ul: '–', ping: '�
 let history = [];
 try { history = JSON.parse(localStorage.getItem('aura_history') || '[]'); } catch(e) {}
 
+// Auth state
+let otpType = 'email';
+let forgotType = 'email';
+let loginType = 'email';
+let registerType = 'email';
+let loginTurnstileToken = null;
+let registerTurnstileToken = null;
+let forgotTurnstileToken = null;
+let verifyingContact = '';
+
 // ══════════════════════════════════════════════════════════════
-// UI HELPERS - UNCHANGED
+// UI HELPERS
 // ══════════════════════════════════════════════════════════════
 const flag = cc => cc ? cc.toUpperCase().replace(/./g, c => String.fromCodePoint(c.charCodeAt(0)+127397)) : '🌍';
 function fmtSpeed(s) { return s > 100 ? Math.round(s).toString() : s.toFixed(1); }
@@ -210,7 +351,218 @@ function detectDevice() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// INFO DETECTION - UNCHANGED
+// MODAL FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+function openModal(id) {
+  document.getElementById(id).classList.add('active');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+function switchModal(from, to) {
+  closeModal(from);
+  openModal(to);
+}
+
+// ══════════════════════════════════════════════════════════════
+// TYPE TOGGLES
+// ══════════════════════════════════════════════════════════════
+function setLoginType(type) {
+  loginType = type;
+  document.querySelectorAll('#modal-login .type-toggle button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('login-label').textContent = type === 'email' ? 'Email' : 'Phone Number';
+  document.getElementById('login-contact').placeholder = type === 'email' ? 'you@example.com' : '+357XXXXXXXX';
+}
+
+function setRegisterType(type) {
+  registerType = type;
+  document.querySelectorAll('#modal-register .type-toggle button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('register-label').textContent = type === 'email' ? 'Email' : 'Phone Number';
+  document.getElementById('register-contact').placeholder = type === 'email' ? 'you@example.com' : '+357XXXXXXXX';
+}
+
+function setForgotType(type) {
+  forgotType = type;
+  document.querySelectorAll('#modal-forgot .type-toggle button').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('forgot-label').textContent = type === 'email' ? 'Email' : 'Phone Number';
+  document.getElementById('forgot-contact').placeholder = type === 'email' ? 'you@example.com' : '+357XXXXXXXX';
+}
+
+// ══════════════════════════════════════════════════════════════
+// TURNSTILE
+// ══════════════════════════════════════════════════════════════
+window.onTurnstileLoad = function() {
+  if (window.turnstile) {
+    turnstile.render('#login-turnstile', {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token) => { loginTurnstileToken = token; }
+    });
+    turnstile.render('#register-turnstile', {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token) => { registerTurnstileToken = token; }
+    });
+    turnstile.render('#forgot-turnstile', {
+      sitekey: TURNSTILE_SITE_KEY,
+      callback: (token) => { forgotTurnstileToken = token; }
+    });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// AUTH FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+async function doLogin(e) {
+  e.preventDefault();
+  const contact = document.getElementById('login-contact').value;
+  const msg = document.getElementById('login-msg');
+  const btn = document.getElementById('login-btn');
+  
+  msg.textContent = '';
+  btn.disabled = true;
+  
+  try {
+    const res = await fetch('send_otp.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        type: loginType,
+        contact: contact,
+        purpose: 'login',
+        turnstile: loginTurnstileToken
+      })
+    });
+    const data = await res.json();
+    
+    if (data.status === 'success') {
+      verifyingContact = contact;
+      document.getElementById('verify-contact-display').textContent = contact;
+      switchModal('modal-login', 'modal-verify');
+    } else {
+      msg.textContent = data.message || 'Error sending code';
+      msg.className = 'modal-msg error';
+    }
+  } catch(e) {
+    msg.textContent = 'Network error';
+    msg.className = 'modal-msg error';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  const contact = document.getElementById('register-contact').value;
+  const msg = document.getElementById('register-msg');
+  
+  msg.textContent = '';
+  
+  try {
+    const res = await fetch('send_otp.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        type: registerType,
+        contact: contact,
+        purpose: 'register',
+        turnstile: registerTurnstileToken
+      })
+    });
+    const data = await res.json();
+    
+    if (data.status === 'success') {
+      verifyingContact = contact;
+      document.getElementById('verify-contact-display').textContent = contact;
+      switchModal('modal-register', 'modal-verify');
+    } else {
+      msg.textContent = data.message || 'Error';
+      msg.className = 'modal-msg error';
+    }
+  } catch(e) {
+    msg.textContent = 'Network error';
+    msg.className = 'modal-msg error';
+  }
+}
+
+async function doVerify(e) {
+  e.preventDefault();
+  const code = document.getElementById('verify-code').value;
+  const msg = document.getElementById('verify-msg');
+  
+  msg.textContent = '';
+  
+  try {
+    const res = await fetch('verify_otp.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        contact: verifyingContact,
+        code: code
+      })
+    });
+    const data = await res.json();
+    
+    if (data.status === 'success') {
+      location.reload();
+    } else {
+      msg.textContent = data.message || 'Invalid code';
+      msg.className = 'modal-msg error';
+    }
+  } catch(e) {
+    msg.textContent = 'Network error';
+    msg.className = 'modal-msg error';
+  }
+}
+
+async function doForgot(e) {
+  e.preventDefault();
+  const contact = document.getElementById('forgot-contact').value;
+  const msg = document.getElementById('forgot-msg');
+  
+  msg.textContent = '';
+  
+  try {
+    const res = await fetch('send_otp.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        type: forgotType,
+        contact: contact,
+        purpose: 'reset',
+        turnstile: forgotTurnstileToken
+      })
+    });
+    const data = await res.json();
+    
+    if (data.status === 'success') {
+      verifyingContact = contact;
+      document.getElementById('verify-contact-display').textContent = contact;
+      switchModal('modal-forgot', 'modal-verify');
+    } else {
+      msg.textContent = data.message || 'Error';
+      msg.className = 'modal-msg error';
+    }
+  } catch(e) {
+    msg.textContent = 'Network error';
+    msg.className = 'modal-msg error';
+  }
+}
+
+async function doLogout() {
+  await fetch('logout.php');
+  location.reload();
+}
+
+function openReportModal() {
+  alert('Report feature - modal to be added');
+}
+
+// ══════════════════════════════════════════════════════════════
+// INFO DETECTION
 // ══════════════════════════════════════════════════════════════
 async function fetchInfo() {
   try {
@@ -229,7 +581,7 @@ async function fetchInfo() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ✅ PING TEST - MINIMAL CHANGE (uses TEST_FILES[0])
+// PING TEST
 // ══════════════════════════════════════════════════════════════
 async function measurePing() {
   let pings = [];
@@ -244,13 +596,13 @@ async function measurePing() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ✅ DOWNLOAD TEST - CHANGED: Multi-file parallel strategy
+// DOWNLOAD TEST - LUMO's optimizations
 // ══════════════════════════════════════════════════════════════
 async function measureDownload(updateCallback) {
   console.log('📥 Download test: Multi-file parallel strategy');
   
-  const WORKERS_PER_FILE = 2;  // 2 workers per file = 8 total streams
-  const DURATION = 30000;  // 30 seconds for TCP to stabilize
+  const WORKERS_PER_FILE = 2;
+  const DURATION = 30000;
   
   let totalBytes = 0;
   let startTime = performance.now();
@@ -260,7 +612,6 @@ async function measureDownload(updateCallback) {
   
   setTimeout(() => { running = false; }, DURATION);
   
-  // Worker function - downloads chunks and restarts immediately
   async function dlWorker(fileUrl) {
     while (running) {
       const xhr = new XMLHttpRequest();
@@ -291,7 +642,6 @@ async function measureDownload(updateCallback) {
       
       xhr.send();
       
-      // Abort after 2 seconds to force new TCP connection/window
       setTimeout(() => {
         if (running && xhr.readyState !== 4) {
           xhr.abort();
@@ -307,7 +657,6 @@ async function measureDownload(updateCallback) {
     }
   }
   
-  // Start workers for each file
   const workers = [];
   for (const file of TEST_FILES) {
     for (let i = 0; i < WORKERS_PER_FILE; i++) {
@@ -325,14 +674,14 @@ async function measureDownload(updateCallback) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ✅ UPLOAD TEST - CHANGED: 30s duration + abort logic
+// UPLOAD TEST - LUMO's optimizations
 // ══════════════════════════════════════════════════════════════
 async function measureUpload(updateCallback) {
   console.log('📤 Upload test starting...');
   
-  const WORKERS = 8;  // 8 workers for gigabit
-  const DURATION = 30000;  // CHANGED: 30 seconds
-  const CHUNK_SIZE = 1048576;  // 1 MB chunks
+  const WORKERS = 8;
+  const DURATION = 30000;
+  const CHUNK_SIZE = 1048576;
   
   let totalBytes = 0;
   let startTime = performance.now();
@@ -341,7 +690,6 @@ async function measureUpload(updateCallback) {
   document.getElementById('phase').textContent = 'UPLOAD';
   updateGauge(0, 'url(#gUL)');
   
-  // Generate random data
   const uploadData = new ArrayBuffer(CHUNK_SIZE);
   const view = new Uint8Array(uploadData);
   for (let i = 0; i < CHUNK_SIZE; i++) {
@@ -382,7 +730,6 @@ async function measureUpload(updateCallback) {
       
       xhr.send(uploadData);
       
-      // Abort after 2 seconds to force new TCP connection
       setTimeout(() => {
         if (running && xhr.readyState !== 4) {
           xhr.abort();
@@ -413,7 +760,7 @@ async function measureUpload(updateCallback) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// RUN TEST - CHANGED: Fire-and-forget save (non-blocking)
+// RUN TEST
 // ══════════════════════════════════════════════════════════════
 async function runTest() {
   const btn = document.getElementById('btn');
@@ -427,24 +774,20 @@ async function runTest() {
   let dlSpeed = 0, ulSpeed = 0, ping = 0;
   
   try {
-    // PING
     document.getElementById('phase').textContent = 'PING';
     ping = await measurePing();
     document.getElementById('rp').textContent = Math.round(ping);
     
-    // DOWNLOAD
     dlSpeed = await measureDownload((s) => {
       document.getElementById('rd').textContent = fmtSpeed(s);
     });
     document.getElementById('rd').textContent = fmtSpeed(dlSpeed);
     
-    // UPLOAD
     ulSpeed = await measureUpload((s) => {
       document.getElementById('ru').textContent = fmtSpeed(s);
     });
     document.getElementById('ru').textContent = fmtSpeed(ulSpeed);
     
-    // CHANGED: Fire and forget - don't wait for DB
     fetch('save_result.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -467,7 +810,6 @@ async function runTest() {
       })
       .catch(e => console.error("Save failed (non-fatal):", e));
     
-    // Immediately mark complete
     document.getElementById('phase').textContent = 'COMPLETE';
     document.getElementById('report-btn').style.display = 'block';
     
@@ -486,7 +828,7 @@ async function runTest() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// SHARE & HISTORY - UNCHANGED
+// SHARE & HISTORY
 // ══════════════════════════════════════════════════════════════
 function shareResults() {
   if (!lastResult.shareLink) return;
@@ -508,19 +850,14 @@ function renderHistory() {
     </div>`).join('');
 }
 
-async function doLogout() {
-  await fetch('logout.php');
-  location.reload();
-}
-
 // ══════════════════════════════════════════════════════════════
-// INIT - UNCHANGED
+// INIT
 // ══════════════════════════════════════════════════════════════
 document.getElementById('btn').addEventListener('click', runTest);
 fetchInfo();
 renderHistory();
 
-console.log('✅ Ready! Multi-stream, 30s duration, accurate results incoming!');
+console.log('✅ Complete version loaded - Auth + LUMO speed test optimizations!');
 </script>
 </body>
 </html>
