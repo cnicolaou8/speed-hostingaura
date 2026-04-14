@@ -1,9 +1,10 @@
 <?php
 // ══════════════════════════════════════════════════════════════
-// HostingAura Speed Test - COMPLETE VERSION
-// ✅ Password Authentication
-// ✅ LUMO Speed Test Optimizations  
-// ✅ Report Modal (Fixed!)
+// HostingAura Speed Test - v3 COMPLETE FIX
+// ✅ Turnstile renders on modal OPEN (not on page load while hidden)
+// ✅ Ping uses dedicated tiny endpoint (ping.php)
+// ✅ Clear completion UI with large result cards
+// ✅ Sliding window measurement + warm-up discard
 // ══════════════════════════════════════════════════════════════
 session_start();
 require_once 'config.php';
@@ -58,16 +59,117 @@ body{min-height:100vh;background:#070711;background-image:radial-gradient(ellips
 .test-id-box{background:#0c0c1c;border:1px solid #181830;border-radius:8px;padding:8px 12px;font-size:.65rem;color:#94a3b8;margin-bottom:14px;display:none;text-align:center;max-width:360px}
 .test-id-box .lbl{font-size:.55rem;letter-spacing:.14em;text-transform:uppercase;color:#475569;margin-right:4px}
 .test-id-box .tid{color:#6366f1;font-weight:700;font-family:monospace}
+
+/* ── GAUGE (during test) ── */
+.test-area{transition:opacity .4s ease}
 .wrap{position:relative;width:260px;height:260px;margin-bottom:22px}
 .wrap svg{width:100%;height:100%;overflow:visible}
 .ci{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none}
 #val{font-size:3.6rem;font-weight:800;letter-spacing:-3px;line-height:1;font-variant-numeric:tabular-nums}
 #unit{font-size:.65rem;color:#475569;letter-spacing:.18em;text-transform:uppercase;margin-top:4px}
 #phase{font-size:.58rem;letter-spacing:.28em;text-transform:uppercase;margin-top:10px;color:#6366f1}
+
+/* ── LIVE CARDS (during test) ── */
 .cards{display:flex;gap:10px;margin-bottom:14px}
 .card{background:#0c0c1c;border:1px solid #181830;border-radius:14px;padding:12px;text-align:center;min-width:82px}
 .cv{font-size:1.3rem;font-weight:700;color:#e2e8f0;min-height:1.5rem}
 .cn{font-size:.52rem;letter-spacing:.16em;color:#475569;text-transform:uppercase}
+
+/* ── RESULTS PANEL (after test completes) ── */
+.results-panel{
+  display:none;
+  width:100%;
+  max-width:440px;
+  margin-bottom:20px;
+  animation:resultsFadeIn .6s ease-out;
+}
+.results-panel.visible{display:block}
+@keyframes resultsFadeIn{
+  from{opacity:0;transform:translateY(16px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.results-header{
+  text-align:center;
+  margin-bottom:16px;
+}
+.results-header .check-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:36px;height:36px;
+  border-radius:50%;
+  background:rgba(34,197,94,.12);
+  margin-bottom:8px;
+}
+.results-header .check-icon svg{width:20px;height:20px;color:#22c55e}
+.results-header h3{
+  font-size:.7rem;
+  letter-spacing:.28em;
+  text-transform:uppercase;
+  color:#22c55e;
+  font-weight:600;
+}
+.results-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:10px;
+  margin-bottom:14px;
+}
+.result-card{
+  background:#0c0c1c;
+  border:1px solid #181830;
+  border-radius:16px;
+  padding:20px 12px;
+  text-align:center;
+  position:relative;
+  overflow:hidden;
+}
+.result-card::before{
+  content:'';
+  position:absolute;
+  top:0;left:0;right:0;
+  height:3px;
+  border-radius:16px 16px 0 0;
+}
+.result-card.dl::before{background:linear-gradient(90deg,#6366f1,#06b6d4)}
+.result-card.ul::before{background:linear-gradient(90deg,#7c3aed,#ec4899)}
+.result-card.pg::before{background:linear-gradient(90deg,#f59e0b,#ef4444)}
+.result-card .r-value{
+  font-size:2.4rem;
+  font-weight:800;
+  letter-spacing:-2px;
+  line-height:1;
+  color:#e2e8f0;
+  font-variant-numeric:tabular-nums;
+}
+.result-card.dl .r-value{
+  background:linear-gradient(135deg,#6366f1,#06b6d4);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.result-card.ul .r-value{
+  background:linear-gradient(135deg,#7c3aed,#ec4899);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.result-card.pg .r-value{
+  background:linear-gradient(135deg,#f59e0b,#ef4444);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.result-card .r-unit{
+  font-size:.6rem;
+  color:#64748b;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  margin-top:4px;
+}
+.result-card .r-label{
+  font-size:.55rem;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:#475569;
+  margin-top:10px;
+  font-weight:600;
+}
+
 .mbbar{background:#0c0c1c;border:1px solid #181830;border-radius:10px;padding:6px 15px;font-size:.64rem;margin-bottom:16px;color:#475569}
 .mbv{font-weight:700;color:#6366f1}
 .privacy-notice{background:#0c0c1c;border:1px solid #181830;border-radius:12px;padding:12px 16px;font-size:.7rem;color:#94a3b8;line-height:1.5;max-width:360px;margin-bottom:16px;text-align:center}
@@ -80,8 +182,10 @@ body{min-height:100vh;background:#070711;background-image:radial-gradient(ellips
 #share-btn:hover{border-color:#6366f1;color:#6366f1}
 #report-btn{display:none;background:none;border:none;color:#475569;font-size:.64rem;cursor:pointer;padding:0 0 18px 0;text-decoration:underline;text-underline-offset:3px;transition:.2s;font-family:inherit}
 #report-btn:hover{color:#f87171}
-.hist-wrap{width:100%;max-width:360px;margin-top:25px}
+.hist-wrap{width:100%;max-width:440px;margin-top:25px}
 .hist-item{background:#0c0c1c;border:1px solid #181830;border-radius:10px;display:flex;padding:10px;margin-bottom:7px;font-size:0.75rem;justify-content:space-between;align-items:center}
+
+/* ── MODALS ── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center}
 .modal-overlay.active{display:flex}
 .modal{background:#0f0f1a;border:1px solid #1e1e3a;border-radius:18px;padding:28px 24px;width:100%;max-width:360px;position:relative;max-height:92vh;overflow-y:auto}
@@ -143,34 +247,66 @@ body{min-height:100vh;background:#070711;background-image:radial-gradient(ellips
   <span class="lbl">TEST ID</span><span class="tid" id="test-id-value">–</span>
 </div>
 
-<div class="wrap">
-  <svg viewBox="0 0 300 300">
-    <defs>
-      <linearGradient id="gDL" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#06b6d4"/>
-      </linearGradient>
-      <linearGradient id="gUL" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#ec4899"/>
-      </linearGradient>
-    </defs>
-    <circle cx="150" cy="150" r="110" fill="none" stroke="#131325" stroke-width="16"
-            stroke-dasharray="518.36 691.15" transform="rotate(135 150 150)"/>
-    <circle id="arc" cx="150" cy="150" r="110" fill="none" stroke="url(#gDL)"
-            stroke-width="16" stroke-linecap="round" stroke-dasharray="518.36 691.15"
-            stroke-dashoffset="518.36" transform="rotate(135 150 150)"
-            style="transition:stroke-dashoffset .15s ease-out"/>
-  </svg>
-  <div class="ci">
-    <div id="val">0</div>
-    <div id="unit">Mbps</div>
-    <div id="phase">READY</div>
+<!-- GAUGE AREA (visible during test, fades after) -->
+<div class="test-area" id="test-area">
+  <div class="wrap">
+    <svg viewBox="0 0 300 300">
+      <defs>
+        <linearGradient id="gDL" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#06b6d4"/>
+        </linearGradient>
+        <linearGradient id="gUL" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#ec4899"/>
+        </linearGradient>
+      </defs>
+      <circle cx="150" cy="150" r="110" fill="none" stroke="#131325" stroke-width="16"
+              stroke-dasharray="518.36 691.15" transform="rotate(135 150 150)"/>
+      <circle id="arc" cx="150" cy="150" r="110" fill="none" stroke="url(#gDL)"
+              stroke-width="16" stroke-linecap="round" stroke-dasharray="518.36 691.15"
+              stroke-dashoffset="518.36" transform="rotate(135 150 150)"
+              style="transition:stroke-dashoffset .15s ease-out"/>
+    </svg>
+    <div class="ci">
+      <div id="val">0</div>
+      <div id="unit">Mbps</div>
+      <div id="phase">READY</div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="cv" id="rd">–</div><div class="cn">Down</div></div>
+    <div class="card"><div class="cv" id="ru">–</div><div class="cn">Up</div></div>
+    <div class="card"><div class="cv" id="rp">–</div><div class="cn">Ping</div></div>
   </div>
 </div>
 
-<div class="cards">
-  <div class="card"><div class="cv" id="rd">–</div><div class="cn">Down</div></div>
-  <div class="card"><div class="cv" id="ru">–</div><div class="cn">Up</div></div>
-  <div class="card"><div class="cv" id="rp">–</div><div class="cn">Ping</div></div>
+<!-- RESULTS PANEL (shown after test completes) -->
+<div class="results-panel" id="results-panel">
+  <div class="results-header">
+    <div class="check-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+    <h3>Test Complete</h3>
+  </div>
+  <div class="results-grid">
+    <div class="result-card dl">
+      <div class="r-value" id="final-dl">–</div>
+      <div class="r-unit">Mbps</div>
+      <div class="r-label">Download</div>
+    </div>
+    <div class="result-card ul">
+      <div class="r-value" id="final-ul">–</div>
+      <div class="r-unit">Mbps</div>
+      <div class="r-label">Upload</div>
+    </div>
+    <div class="result-card pg">
+      <div class="r-value" id="final-ping">–</div>
+      <div class="r-unit">ms</div>
+      <div class="r-label">Ping</div>
+    </div>
+  </div>
 </div>
 
 <div class="mbbar">📦 Data Used: <span class="mbv" id="mbv">0.00</span> MB</div>
@@ -331,27 +467,83 @@ body{min-height:100vh;background:#070711;background-image:radial-gradient(ellips
 
 <script>
 'use strict';
-console.log('🚀 HostingAura Speed Test - COMPLETE VERSION');
+console.log('🚀 HostingAura Speed Test v3 - Complete Fix');
 
 const TURNSTILE_SITE_KEY = '<?= TURNSTILE_SITE_KEY ?? "0x4AAAAAAC1BmAZPlmbVHYDb" ?>';
 const TEST_FILES = ['/test-files/100mb.bin','/test-files/50mb.bin','/test-files/25mb.bin','/test-files/10mb.bin'];
 const UPLOAD_ENDPOINT = 'empty.php';
+const PING_ENDPOINT = 'ping.php';     // ← NEW: tiny dedicated ping endpoint
 const ARC_LEN = 518.36;
 const MAX_SPEED = 1000;
+
+// ══════════════════════════════════════════════════════════════
+// SPEED TEST TUNING
+// ══════════════════════════════════════════════════════════════
+const DL_WORKERS       = 6;
+const DL_DURATION      = 20000;
+const DL_WARMUP        = 3000;
+const DL_WINDOW        = 5000;
+const DL_ABORT_TIMEOUT = 12000;
+
+const UL_WORKERS       = 6;
+const UL_DURATION      = 20000;
+const UL_WARMUP        = 3000;
+const UL_WINDOW        = 5000;
+const UL_CHUNK_SIZE    = 4 * 1048576;
+const UL_ABORT_TIMEOUT = 12000;
 
 let totalBytesUsed = 0;
 let lastResult = { shareLink: null, testId: null, dl: '–', ul: '–', ping: '–' };
 let history = [];
 try { history = JSON.parse(localStorage.getItem('aura_history') || '[]'); } catch(e) {}
 
-let loginType = 'email';
-let registerType = 'email';
-let forgotType = 'email';
-let loginTurnstileToken = null;
-let registerTurnstileToken = null;
-let forgotTurnstileToken = null;
-let reportTurnstileToken = null;
+let loginType = 'email', registerType = 'email', forgotType = 'email';
 
+// ══════════════════════════════════════════════════════════════
+// TURNSTILE - render on modal open, not on page load
+// Tokens stored per-modal, reset on close
+// ══════════════════════════════════════════════════════════════
+let turnstileReady = false;
+const turnstileTokens = {};    // { 'login': token, 'register': token, ... }
+const turnstileWidgets = {};   // { 'login': widgetId, ... }
+
+window.onTurnstileLoad = function() {
+  turnstileReady = true;
+  console.log('✅ Turnstile API ready');
+};
+
+function renderTurnstile(modalName, containerId) {
+  if (!turnstileReady || !window.turnstile) {
+    console.warn('Turnstile not ready yet');
+    return;
+  }
+  // If already rendered for this modal, reset it to get a fresh token
+  if (turnstileWidgets[modalName] !== undefined) {
+    try { turnstile.reset(turnstileWidgets[modalName]); } catch(e) {}
+    return;
+  }
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  turnstileWidgets[modalName] = turnstile.render('#' + containerId, {
+    sitekey: TURNSTILE_SITE_KEY,
+    callback: (token) => {
+      turnstileTokens[modalName] = token;
+      console.log('🔑 Turnstile token received for:', modalName);
+    },
+    'expired-callback': () => {
+      turnstileTokens[modalName] = null;
+      console.log('⚠️ Turnstile token expired for:', modalName);
+    }
+  });
+}
+
+function getTurnstileToken(modalName) {
+  return turnstileTokens[modalName] || null;
+}
+
+// ══════════════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════════════
 const flag = cc => cc ? cc.toUpperCase().replace(/./g, c => String.fromCodePoint(c.charCodeAt(0)+127397)) : '🌍';
 function fmtSpeed(s) { return s > 100 ? Math.round(s).toString() : s.toFixed(1); }
 
@@ -374,9 +566,34 @@ function detectDevice() {
   return browser;
 }
 
-function openModal(id) { document.getElementById(id).classList.add('active'); }
-function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-function switchModal(from, to) { closeModal(from); openModal(to); }
+// ══════════════════════════════════════════════════════════════
+// MODAL MANAGEMENT — renders Turnstile when modal opens
+// ══════════════════════════════════════════════════════════════
+const modalTurnstileMap = {
+  'modal-login': { name: 'login', container: 'login-turnstile' },
+  'modal-register': { name: 'register', container: 'register-turnstile' },
+  'modal-forgot': { name: 'forgot', container: 'forgot-turnstile' },
+  'modal-report': { name: 'report', container: 'report-turnstile' },
+};
+
+function openModal(id) {
+  document.getElementById(id).classList.add('active');
+  // Render Turnstile now that the modal is visible
+  const cfg = modalTurnstileMap[id];
+  if (cfg) {
+    // Small delay to ensure modal is fully visible for Turnstile
+    setTimeout(() => renderTurnstile(cfg.name, cfg.container), 150);
+  }
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+function switchModal(from, to) {
+  closeModal(from);
+  openModal(to);
+}
 
 function setLoginType(type) {
   loginType = type;
@@ -402,29 +619,10 @@ function setForgotType(type) {
   document.getElementById('forgot-contact').placeholder = type === 'email' ? 'you@example.com' : '+357XXXXXXXX';
 }
 
-window.onTurnstileLoad = function() {
-  if (window.turnstile) {
-    turnstile.render('#login-turnstile', {
-      sitekey: TURNSTILE_SITE_KEY,
-      callback: (token) => { loginTurnstileToken = token; }
-    });
-    turnstile.render('#register-turnstile', {
-      sitekey: TURNSTILE_SITE_KEY,
-      callback: (token) => { registerTurnstileToken = token; }
-    });
-    turnstile.render('#forgot-turnstile', {
-      sitekey: TURNSTILE_SITE_KEY,
-      callback: (token) => { forgotTurnstileToken = token; }
-    });
-    turnstile.render('#report-turnstile', {
-      sitekey: TURNSTILE_SITE_KEY,
-      callback: (token) => { reportTurnstileToken = token; }
-    });
-  }
-};
-
 // ══════════════════════════════════════════════════════════════
-// AUTHENTICATION
+// AUTHENTICATION — now uses getTurnstileToken()
+// Sends BOTH 'turnstile' and 'turnstile_token' keys to handle
+// whichever the backend expects
 // ══════════════════════════════════════════════════════════════
 async function doLogin(e) {
   e.preventDefault();
@@ -432,8 +630,16 @@ async function doLogin(e) {
   const password = document.getElementById('login-password').value;
   const msg = document.getElementById('login-msg');
   const btn = document.getElementById('login-btn');
+  const token = getTurnstileToken('login');
   
   msg.textContent = '';
+
+  if (!token) {
+    msg.textContent = 'Please complete the security check first';
+    msg.className = 'modal-msg error';
+    return;
+  }
+
   btn.disabled = true;
   
   try {
@@ -444,7 +650,8 @@ async function doLogin(e) {
         type: loginType,
         contact: contact,
         password: password,
-        turnstile: loginTurnstileToken
+        turnstile: token,
+        turnstile_token: token   // send both keys
       })
     });
     const data = await res.json();
@@ -454,6 +661,8 @@ async function doLogin(e) {
     } else {
       msg.textContent = data.message || 'Login failed';
       msg.className = 'modal-msg error';
+      // Reset turnstile for retry
+      renderTurnstile('login', 'login-turnstile');
     }
   } catch(e) {
     msg.textContent = 'Network error';
@@ -469,11 +678,18 @@ async function doRegister(e) {
   const password = document.getElementById('register-password').value;
   const passwordConfirm = document.getElementById('register-password-confirm').value;
   const msg = document.getElementById('register-msg');
+  const token = getTurnstileToken('register');
   
   msg.textContent = '';
   
   if (password !== passwordConfirm) {
     msg.textContent = 'Passwords do not match';
+    msg.className = 'modal-msg error';
+    return;
+  }
+
+  if (!token) {
+    msg.textContent = 'Please complete the security check first';
     msg.className = 'modal-msg error';
     return;
   }
@@ -486,7 +702,8 @@ async function doRegister(e) {
         type: registerType,
         contact: contact,
         password: password,
-        turnstile: registerTurnstileToken
+        turnstile: token,
+        turnstile_token: token
       })
     });
     const data = await res.json();
@@ -496,6 +713,7 @@ async function doRegister(e) {
     } else {
       msg.textContent = data.message || 'Registration failed';
       msg.className = 'modal-msg error';
+      renderTurnstile('register', 'register-turnstile');
     }
   } catch(e) {
     msg.textContent = 'Network error';
@@ -507,8 +725,15 @@ async function doForgot(e) {
   e.preventDefault();
   const contact = document.getElementById('forgot-contact').value;
   const msg = document.getElementById('forgot-msg');
+  const token = getTurnstileToken('forgot');
   
   msg.textContent = '';
+
+  if (!token) {
+    msg.textContent = 'Please complete the security check first';
+    msg.className = 'modal-msg error';
+    return;
+  }
   
   try {
     const res = await fetch('send_otp.php', {
@@ -518,7 +743,8 @@ async function doForgot(e) {
         type: forgotType,
         contact: contact,
         purpose: 'reset',
-        turnstile: forgotTurnstileToken
+        turnstile: token,
+        turnstile_token: token
       })
     });
     const data = await res.json();
@@ -559,8 +785,15 @@ async function doReport(e) {
   const contact = document.getElementById('report-contact').value;
   const wantsContact = document.getElementById('report-wants-contact').checked;
   const msg = document.getElementById('report-msg');
+  const token = getTurnstileToken('report');
   
   msg.textContent = '';
+
+  if (!token) {
+    msg.textContent = 'Please complete the security check first';
+    msg.className = 'modal-msg error';
+    return;
+  }
   
   try {
     const res = await fetch('report_issue.php', {
@@ -577,7 +810,7 @@ async function doReport(e) {
         ping: lastResult.ping,
         isp: document.getElementById('v-isp').textContent,
         device: detectDevice(),
-        turnstile_token: reportTurnstileToken
+        turnstile_token: token
       })
     });
     const data = await res.json();
@@ -619,134 +852,286 @@ async function fetchInfo() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// SPEED TEST
+// SLIDING WINDOW SPEED CALCULATOR
+// ══════════════════════════════════════════════════════════════
+class SpeedMeter {
+  constructor(windowMs, warmupMs) {
+    this.windowMs = windowMs;
+    this.warmupMs = warmupMs;
+    this.samples = [];
+    this.totalBytes = 0;
+    this.startTime = 0;
+    this.peakSpeed = 0;
+    this.currentSpeed = 0;
+  }
+
+  start() {
+    this.startTime = performance.now();
+    this.samples = [];
+    this.totalBytes = 0;
+    this.peakSpeed = 0;
+    this.currentSpeed = 0;
+  }
+
+  addBytes(bytes) {
+    const now = performance.now();
+    this.totalBytes += bytes;
+    this.samples.push({ time: now, bytes });
+
+    const elapsed = now - this.startTime;
+    if (elapsed < this.warmupMs) return 0;
+
+    const windowStart = now - this.windowMs;
+    const effectiveStart = Math.max(windowStart, this.startTime + this.warmupMs);
+
+    let windowBytes = 0;
+    let oldestInWindow = now;
+    for (let i = this.samples.length - 1; i >= 0; i--) {
+      const s = this.samples[i];
+      if (s.time < effectiveStart) break;
+      windowBytes += s.bytes;
+      oldestInWindow = s.time;
+    }
+
+    const windowDuration = (now - Math.max(oldestInWindow, effectiveStart)) / 1000;
+    if (windowDuration > 0.5) {
+      this.currentSpeed = (windowBytes * 8) / (windowDuration * 1000000);
+      if (this.currentSpeed > this.peakSpeed) {
+        this.peakSpeed = this.currentSpeed;
+      }
+    }
+
+    // Prune old samples
+    const pruneTime = now - (this.windowMs * 2);
+    while (this.samples.length > 0 && this.samples[0].time < pruneTime) {
+      this.samples.shift();
+    }
+
+    return this.currentSpeed;
+  }
+
+  getFinalSpeed() {
+    if (this.peakSpeed > 0) {
+      return this.peakSpeed * 0.7 + this.currentSpeed * 0.3;
+    }
+    return this.currentSpeed;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SPEED TEST ENGINE
 // ══════════════════════════════════════════════════════════════
 async function measurePing() {
+  // Use dedicated ping.php (tiny response) for accurate RTT
+  // Falls back to Cloudflare trace if ping.php fails
+  let endpoint = PING_ENDPOINT;
   let pings = [];
-  for (let i = 0; i < 5; i++) {
+
+  // Warm-up request (establish connection, DNS, TLS)
+  try { await fetch(endpoint + '?warmup=1', { cache: 'no-store' }); } catch(e) {
+    endpoint = 'https://www.cloudflare.com/cdn-cgi/trace';
+    try { await fetch(endpoint, { cache: 'no-store' }); } catch(e2) {}
+  }
+
+  // Actual measurements
+  for (let i = 0; i < 10; i++) {
     const t0 = performance.now();
     try {
-      await fetch(TEST_FILES[0], { method: 'HEAD', cache: 'no-store' });
+      await fetch(endpoint + '?p=' + i + '&r=' + Math.random(), { cache: 'no-store' });
       pings.push(performance.now() - t0);
     } catch(e) {}
   }
-  return pings.length ? Math.min(...pings) : 0;
+  
+  if (!pings.length) return 0;
+  // Sort and take median for stability
+  pings.sort((a, b) => a - b);
+  // Remove worst 20% (outliers)
+  const trimCount = Math.floor(pings.length * 0.2);
+  const trimmed = pings.slice(0, pings.length - trimCount);
+  // Return median of trimmed set
+  return trimmed[Math.floor(trimmed.length / 2)];
 }
 
 async function measureDownload(updateCallback) {
-  console.log('📥 Download test');
-  const WORKERS_PER_FILE = 2;
-  const DURATION = 30000;
-  let totalBytes = 0;
-  let startTime = performance.now();
+  console.log('📥 Download: %d workers, %ds, %ds warmup', DL_WORKERS, DL_DURATION/1000, DL_WARMUP/1000);
+  const meter = new SpeedMeter(DL_WINDOW, DL_WARMUP);
+  meter.start();
   let running = true;
-  document.getElementById('phase').textContent = 'DOWNLOAD';
-  setTimeout(() => { running = false; }, DURATION);
-  
-  async function dlWorker(fileUrl) {
+  document.getElementById('phase').textContent = 'WARMING UP';
+
+  setTimeout(() => { running = false; }, DL_DURATION);
+  setTimeout(() => { if (running) document.getElementById('phase').textContent = 'DOWNLOAD'; }, DL_WARMUP);
+
+  const primaryFile = TEST_FILES[0];
+
+  async function dlWorker(id) {
     while (running) {
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', fileUrl + '?r=' + Math.random(), true);
-      xhr.responseType = 'arraybuffer';
-      let prevLoaded = 0;
-      xhr.onprogress = (e) => {
-        if (!running) { xhr.abort(); return; }
-        const chunk = e.loaded - prevLoaded;
-        prevLoaded = e.loaded;
-        totalBytes += chunk;
-        totalBytesUsed += chunk;
-        document.getElementById('mbv').textContent = (totalBytesUsed / 1048576).toFixed(2);
-        const elapsed = (performance.now() - startTime) / 1000;
-        if (elapsed > 1) {
-          const speed = (totalBytes * 8) / (elapsed * 1000000);
-          updateCallback(speed);
-          updateGauge(speed, 'url(#gDL)');
-        }
-      };
-      xhr.send();
-      setTimeout(() => { if (running && xhr.readyState !== 4) xhr.abort(); }, 2000);
-      await new Promise(resolve => { xhr.onloadend = resolve; xhr.onerror = resolve; });
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', primaryFile + '?w=' + id + '&r=' + Math.random(), true);
+        xhr.responseType = 'arraybuffer';
+        let prevLoaded = 0;
+
+        xhr.onprogress = (e) => {
+          if (!running) { xhr.abort(); return; }
+          const chunk = e.loaded - prevLoaded;
+          prevLoaded = e.loaded;
+          totalBytesUsed += chunk;
+          document.getElementById('mbv').textContent = (totalBytesUsed / 1048576).toFixed(2);
+          const speed = meter.addBytes(chunk);
+          if (speed > 0) {
+            updateCallback(speed);
+            updateGauge(speed, 'url(#gDL)');
+          }
+        };
+
+        xhr.send();
+        const abortTimer = setTimeout(() => {
+          if (running && xhr.readyState !== 4) xhr.abort();
+        }, DL_ABORT_TIMEOUT);
+
+        await new Promise(resolve => {
+          xhr.onloadend = () => { clearTimeout(abortTimer); resolve(); };
+          xhr.onerror = () => { clearTimeout(abortTimer); resolve(); };
+        });
+      } catch(e) {
+        await new Promise(r => setTimeout(r, 100));
+      }
       if (!running) break;
     }
   }
-  
+
   const workers = [];
-  for (const file of TEST_FILES) {
-    for (let i = 0; i < WORKERS_PER_FILE; i++) {
-      workers.push(dlWorker(file));
-    }
-  }
+  for (let i = 0; i < DL_WORKERS; i++) workers.push(dlWorker(i));
   await Promise.all(workers);
-  const finalElapsed = (performance.now() - startTime) / 1000;
-  return finalElapsed > 0 ? (totalBytes * 8) / (finalElapsed * 1000000) : 0;
+
+  return meter.getFinalSpeed();
 }
 
 async function measureUpload(updateCallback) {
-  console.log('📤 Upload test');
-  const WORKERS = 8;
-  const DURATION = 30000;
-  const CHUNK_SIZE = 1048576;
-  let totalBytes = 0;
-  let startTime = performance.now();
+  console.log('📤 Upload: %d workers, %dMB chunks, %ds', UL_WORKERS, UL_CHUNK_SIZE/1048576, UL_DURATION/1000);
+  const meter = new SpeedMeter(UL_WINDOW, UL_WARMUP);
+  meter.start();
   let running = true;
-  document.getElementById('phase').textContent = 'UPLOAD';
+  document.getElementById('phase').textContent = 'WARMING UP';
   updateGauge(0, 'url(#gUL)');
-  const uploadData = new ArrayBuffer(CHUNK_SIZE);
-  const view = new Uint8Array(uploadData);
-  for (let i = 0; i < CHUNK_SIZE; i++) view[i] = Math.random() * 256 | 0;
-  setTimeout(() => { running = false; }, DURATION);
-  
-  async function ulWorker() {
+
+  setTimeout(() => { running = false; }, UL_DURATION);
+  setTimeout(() => { if (running) document.getElementById('phase').textContent = 'UPLOAD'; }, UL_WARMUP);
+
+  const uploadData = new ArrayBuffer(UL_CHUNK_SIZE);
+  if (window.crypto && crypto.getRandomValues) {
+    for (let offset = 0; offset < UL_CHUNK_SIZE; offset += 65536) {
+      crypto.getRandomValues(new Uint8Array(uploadData, offset, Math.min(65536, UL_CHUNK_SIZE - offset)));
+    }
+  } else {
+    const v = new Uint8Array(uploadData);
+    for (let i = 0; i < UL_CHUNK_SIZE; i++) v[i] = Math.random() * 256 | 0;
+  }
+
+  async function ulWorker(id) {
     while (running) {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', UPLOAD_ENDPOINT, true);
-      let prevLoaded = 0;
-      xhr.upload.onprogress = (e) => {
-        if (!running) { xhr.abort(); return; }
-        const chunk = e.loaded - prevLoaded;
-        prevLoaded = e.loaded;
-        totalBytes += chunk;
-        totalBytesUsed += chunk;
-        document.getElementById('mbv').textContent = (totalBytesUsed / 1048576).toFixed(2);
-        const elapsed = (performance.now() - startTime) / 1000;
-        if (elapsed > 1) {
-          const speed = (totalBytes * 8) / (elapsed * 1000000);
-          updateCallback(speed);
-          updateGauge(speed, 'url(#gUL)');
-        }
-      };
-      xhr.send(uploadData);
-      setTimeout(() => { if (running && xhr.readyState !== 4) xhr.abort(); }, 2000);
-      await new Promise(resolve => { xhr.onloadend = resolve; xhr.onerror = resolve; });
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', UPLOAD_ENDPOINT + '?w=' + id + '&r=' + Math.random(), true);
+        let prevLoaded = 0;
+
+        xhr.upload.onprogress = (e) => {
+          if (!running) { xhr.abort(); return; }
+          const chunk = e.loaded - prevLoaded;
+          prevLoaded = e.loaded;
+          totalBytesUsed += chunk;
+          document.getElementById('mbv').textContent = (totalBytesUsed / 1048576).toFixed(2);
+          const speed = meter.addBytes(chunk);
+          if (speed > 0) {
+            updateCallback(speed);
+            updateGauge(speed, 'url(#gUL)');
+          }
+        };
+
+        xhr.send(uploadData);
+        const abortTimer = setTimeout(() => {
+          if (running && xhr.readyState !== 4) xhr.abort();
+        }, UL_ABORT_TIMEOUT);
+
+        await new Promise(resolve => {
+          xhr.onloadend = () => { clearTimeout(abortTimer); resolve(); };
+          xhr.onerror = () => { clearTimeout(abortTimer); resolve(); };
+        });
+      } catch(e) {
+        await new Promise(r => setTimeout(r, 100));
+      }
       if (!running) break;
     }
   }
-  
+
   const workers = [];
-  for (let i = 0; i < WORKERS; i++) workers.push(ulWorker());
+  for (let i = 0; i < UL_WORKERS; i++) workers.push(ulWorker(i));
   await Promise.all(workers);
-  const finalElapsed = (performance.now() - startTime) / 1000;
-  return finalElapsed > 0 ? (totalBytes * 8) / (finalElapsed * 1000000) : 0;
+
+  return meter.getFinalSpeed();
 }
 
+// ══════════════════════════════════════════════════════════════
+// UI STATE MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+function showTestUI() {
+  document.getElementById('test-area').style.opacity = '1';
+  document.getElementById('test-area').style.display = '';
+  document.getElementById('results-panel').classList.remove('visible');
+}
+
+function showResultsUI(dl, ul, ping) {
+  // Hide gauge, show results panel
+  document.getElementById('test-area').style.display = 'none';
+  
+  const panel = document.getElementById('results-panel');
+  document.getElementById('final-dl').textContent = fmtSpeed(dl);
+  document.getElementById('final-ul').textContent = fmtSpeed(ul);
+  document.getElementById('final-ping').textContent = Math.round(ping);
+  panel.classList.add('visible');
+}
+
+// ══════════════════════════════════════════════════════════════
+// RUN TEST
+// ══════════════════════════════════════════════════════════════
 async function runTest() {
   const btn = document.getElementById('btn');
   btn.disabled = true;
   btn.textContent = 'Running...';
   totalBytesUsed = 0;
   document.getElementById('mbv').textContent = '0.00';
+  
+  // Reset UI to test mode
+  showTestUI();
   updateGauge(0, 'url(#gDL)');
+  document.getElementById('rd').textContent = '–';
+  document.getElementById('ru').textContent = '–';
+  document.getElementById('rp').textContent = '–';
+  document.getElementById('share-btn').style.display = 'none';
+  document.getElementById('report-btn').style.display = 'none';
+  
   let dlSpeed = 0, ulSpeed = 0, ping = 0;
   
   try {
+    // PING
     document.getElementById('phase').textContent = 'PING';
     ping = await measurePing();
     document.getElementById('rp').textContent = Math.round(ping);
-    dlSpeed = await measureDownload((s) => { document.getElementById('rd').textContent = fmtSpeed(s); });
+
+    // DOWNLOAD
+    dlSpeed = await measureDownload((s) => {
+      document.getElementById('rd').textContent = fmtSpeed(s);
+    });
     document.getElementById('rd').textContent = fmtSpeed(dlSpeed);
-    ulSpeed = await measureUpload((s) => { document.getElementById('ru').textContent = fmtSpeed(s); });
+
+    // UPLOAD
+    ulSpeed = await measureUpload((s) => {
+      document.getElementById('ru').textContent = fmtSpeed(s);
+    });
     document.getElementById('ru').textContent = fmtSpeed(ulSpeed);
     
+    // Save result
     fetch('save_result.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -772,8 +1157,10 @@ async function runTest() {
       })
       .catch(e => console.error("Save failed:", e));
     
-    document.getElementById('phase').textContent = 'COMPLETE';
+    // ✨ SWITCH TO RESULTS UI
+    showResultsUI(dlSpeed, ulSpeed, ping);
     document.getElementById('report-btn').style.display = 'block';
+    
     history.unshift({ time: new Date().toLocaleTimeString(), dl: dlSpeed.toFixed(1), ul: ulSpeed.toFixed(1) });
     history = history.slice(0, 5);
     localStorage.setItem('aura_history', JSON.stringify(history));
@@ -783,7 +1170,7 @@ async function runTest() {
     document.getElementById('phase').textContent = 'ERROR';
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Start Speed Test';
+    btn.textContent = 'Run Again';
   }
 }
 
@@ -810,7 +1197,7 @@ function renderHistory() {
 document.getElementById('btn').addEventListener('click', runTest);
 fetchInfo();
 renderHistory();
-console.log('✅ Complete version loaded - All features working!');
+console.log('✅ v3 loaded — Turnstile fix, ping fix, results UI');
 </script>
 </body>
 </html>
